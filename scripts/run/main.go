@@ -23,13 +23,15 @@ func main() {
 	g, ctx := errgroup.WithContext(ctx)
 
 	// 1. Start the Server
-	g.Go(func() error {
-		return runProcess(ctx, "Server", "go", "run", "scripts/simulate_server/main.go")
+	for i := 1; i <= 3; i++ {
+		g.Go(func() error {
+			return runProcess(ctx, "Server", "go", "run", "scripts/simulate_server/main.go", fmt.Sprintf("-id=%d", i))
 	})
+	}
 
 	// 2. Start the Proxy
 	g.Go(func() error {
-		return runProcess(ctx, "Proxy", "go", "run", "cmd/proxy/main.go")
+		return runProcess(ctx, "Proxy", "go", "run", "cmd/balancer/main.go")
 	})
 
 	// Give the server and proxy a short delay to start up before launching traffic

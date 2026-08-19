@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -15,8 +16,11 @@ var (
 
 func main() {
 	// Define the command-line flag (defaulting to "instance-1" if omitted)
-	instanceID := flag.String("id", "instance-1", "Instance ID of the server")
+	ptrID := flag.Int64("id", 1, "Instance ID of the server")
 	flag.Parse()
+	instanceID := *ptrID
+
+	port := 2115 + 100 * (instanceID-1)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -26,11 +30,11 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"instance_id": *instanceID,
+			"instance_id": instanceID,
 			"visits":      currentCount,
 		})
 	})
 
-	log.Printf("Starting server %s on :2115...", *instanceID)
-	log.Fatal(http.ListenAndServe("127.0.0.1:2115", nil))
+	log.Printf("Starting server %d on :%d...", instanceID, port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), nil))
 }

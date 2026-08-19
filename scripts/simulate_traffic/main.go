@@ -10,7 +10,7 @@ import (
 func main() {
 	req, err := http.NewRequest("GET", "http://localhost:8080", nil)
 	if err != nil {
-		fmt.Printf("Issue when creating request: %w", err)
+		fmt.Printf("Issue when creating request: %s", err)
 		os.Exit(1)
 	}
 
