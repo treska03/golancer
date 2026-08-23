@@ -2,12 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 
-	"github.com/treska03/golancer/internal/backend"
 	"github.com/treska03/golancer/internal/domain"
 )
 
@@ -15,47 +13,63 @@ type RegisterBackendRequest struct {
 	URL string `json:"url"`
 }
 
-func ListBackendsHandler(reg *backend.Registry) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		backends := reg.ListBackends()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string][]*domain.Backend{"backends": backends})
-	}
+// BackendHandler serves the backend management API.
+type BackendHandler struct {
+	reg Registry
 }
 
-func RegisterBackendHandler(reg *backend.Registry) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		u, err := getRegisteredURL(r)
-		if err != nil {
-			ErrorResponse(w, err, http.StatusBadRequest)
-			return
-		}
-		id, err := reg.AddNewBackend(u)
-		if err != nil {
-			ErrorResponse(w, err, http.StatusConflict)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"instanceID": id})
-	}
+type Registry interface {
+	AddNewBackend(*url.URL) (string, error)
+	ListBackends() []*domain.Backend
+	RemoveInstanceByID(string) bool
 }
 
-func DeregisterBackendHandler(reg *backend.Registry) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		target := r.PathValue("instanceID")
-		if target == "" {
-			ErrorResponse(w, errors.New("instanceID must be provided"), http.StatusBadRequest)
-			return
-		}
-		if ok := reg.RemoveInstanceByID(target); !ok {
-			ErrorResponse(w, fmt.Errorf("backend with instanceID %s not found", target), http.StatusNotFound)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+func NewBackendHandler(reg Registry) *BackendHandler {
+	return &BackendHandler{reg: reg}
+}
+
+// Routes registers the backend management endpoints on the given mux.
+func (h *BackendHandler) Routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /backends", h.list)
+	mux.HandleFunc("POST /backends", h.register)
+	mux.HandleFunc("DELETE /backends/{instanceID}", h.deregister)
+}
+
+func (h *BackendHandler) list(w http.ResponseWriter, r *http.Request) {
+	backends := h.reg.ListBackends()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string][]*domain.Backend{"backends": backends})
+}
+
+func (h *BackendHandler) register(w http.ResponseWriter, r *http.Request) {
+	u, err := getRegisteredURL(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+	id, err := h.reg.AddNewBackend(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"instanceID": id})
+}
+
+func (h *BackendHandler) deregister(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("instanceID")
+	if target == "" {
+		http.Error(w, "instanceID must be provided", http.StatusBadRequest)
+		return
+	}
+	if ok := h.reg.RemoveInstanceByID(target); !ok {
+		http.Error(w, fmt.Sprintf("backend with instanceID %s not found", target), http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func getRegisteredURL(r *http.Request) (*url.URL, error) {

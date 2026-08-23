@@ -6,38 +6,44 @@ import (
 	"net/url"
 )
 
-// Balancer defines an interface for getting the target server.
-type Balancer interface {
-	GetServer() (*url.URL, error)
+type (
+	// Selector picks the backend a request should be forwarded to.
+	Selector interface {
+		GetServer() (*url.URL, error)
+	}
+
+	// Handler asks the Selector for a backend and reverse-proxies the request to it.
+	Handler struct {
+		selector Selector
+	}
+)
+
+func NewHandler(s Selector) *Handler {
+	return &Handler{selector: s}
 }
 
-// ProxyHandler implements http.Handler to forward traffic.
-type ProxyHandler struct {
-	balancer Balancer
+// Routes mounts the proxy as the catch-all handler for any request.
+func (h *Handler) Routes(mux *http.ServeMux) {
+	mux.Handle("/", h)
 }
 
-func NewProxyHandler(b Balancer) *ProxyHandler {
-	return &ProxyHandler{balancer: b}
-}
-
-func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Ask the balancer where to send this request
-	target, err := p.balancer.GetServer()
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Ask the selector where to send this request.
+	target, err := h.selector.GetServer()
 	if err != nil {
-		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "no healthy backends registered", http.StatusServiceUnavailable)
 		return
 	}
 
-	// Single-request reverse proxy instance configured for the selected target
-	proxy := &httputil.ReverseProxy{
+	rp := &httputil.ReverseProxy{
 		Rewrite: func(req *httputil.ProxyRequest) {
 			req.Out.URL.Scheme = target.Scheme
 			req.Out.URL.Host = target.Host
-			req.Out.URL.Path = r.URL.Path
-			req.Out.Header.Set("X-Forwarded-Host", r.Host)
+			req.Out.URL.Path = req.In.URL.Path
+			req.Out.Header.Set("X-Forwarded-Host", req.In.Host)
 			req.Out.Host = target.Host
 		},
 	}
 
-	proxy.ServeHTTP(w, r)
+	rp.ServeHTTP(w, r)
 }

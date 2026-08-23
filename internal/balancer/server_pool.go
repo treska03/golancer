@@ -2,20 +2,26 @@ package balancer
 
 import (
 	"errors"
-	"github.com/treska03/golancer/internal/backend"
 	"net/url"
 	"sync/atomic"
+
+	"github.com/treska03/golancer/internal/domain"
 )
 
 var ErrNoBackends = errors.New("no backend servers available")
 
-// ServerPool manages a list of backend target URLs.
-type ServerPool struct {
-	reg     *backend.Registry
-	current atomic.Uint64
-}
+// ServerPool manages a list of backends.
+type (
+	Registry interface {
+		ListBackends() []*domain.Backend
+	}
+	ServerPool struct {
+		reg     Registry
+		current atomic.Uint64
+	}
+)
 
-func NewServerPool(reg *backend.Registry) (*ServerPool, error) {
+func NewServerPool(reg Registry) (*ServerPool, error) {
 	return &ServerPool{reg: reg}, nil
 }
 
