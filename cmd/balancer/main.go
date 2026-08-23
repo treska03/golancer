@@ -1,18 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"golancer/m/internal/balancer"
-	"golancer/m/internal/proxy"
 	"log"
 	"net/http"
+
+	"github.com/treska03/golancer/internal/backend"
+	"github.com/treska03/golancer/internal/balancer"
+	"github.com/treska03/golancer/internal/proxy"
 )
 
 func main() {
+	// 0. Load baseline backends from config
+	backends := loadBackends()
+
+	registry := backend.NewRegistry(backends)
+
 	// 1. Initialize the Balancer with backends
-	pool, err := balancer.NewServerPool()
+	pool, err := balancer.NewServerPool(registry)
 	if err != nil {
-		fmt.Println("Hi")
 		log.Fatalf("Failed to initialize balancer: %v", err)
 	}
 
@@ -20,6 +25,6 @@ func main() {
 	proxyHandler := proxy.NewProxyHandler(pool)
 
 	// 3. Start Listening
-	log.Println("Load balancer running on :8080")
+	log.Printf("Load balancer running on :8080 with %d baseline backend(s)", len(backends))
 	log.Fatal(http.ListenAndServe(":8080", proxyHandler))
 }

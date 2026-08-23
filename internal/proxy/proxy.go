@@ -34,7 +34,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			req.Out.URL.Scheme = target.Scheme
 			req.Out.URL.Host = target.Host
 			req.Out.URL.Path = r.URL.Path
-			req.Out.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
+			req.Out.Header.Set("X-Forwarded-Host", r.Host)
 			req.Out.Host = target.Host
 		},
 	}

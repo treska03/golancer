@@ -1,0 +1,6 @@
+# Baseline backend servers loaded into the pool on startup.
+# Additional backends can still be registered at runtime via the API.
+backends:
+  - http://127.0.0.1:2115
+  - http://127.0.0.1:2215
+  - http://127.0.0.1:2315
