@@ -1,6 +1,20 @@
 # Baseline backend servers loaded into the pool on startup.
 # Additional backends can still be registered at runtime via the API.
 backends:
-  - http://127.0.0.1:2115
-  - http://127.0.0.1:2215
-  - http://127.0.0.1:2315
+  - url: http://127.0.0.1:2115
+    weight: 2
+  - url: http://127.0.0.1:2215
+    weight: 3
+  - url: http://127.0.0.1:2315
+    weight: 5
+
+# Active health probing. Backends are only routed to once a probe succeeds, and
+# are evicted after unhealthyThreshold consecutive failures. All fields are
+# optional; the values below are the defaults.
+health:
+  interval: 15s            # delay between probe rounds
+  timeout: 2s             # per-probe request timeout
+  path: /healthz          # path probed on each backend (expects 2xx)
+  healthyThreshold: 1     # consecutive successes to (re)admit a backend
+  unhealthyThreshold: 3   # consecutive failures to evict a backend
+  maxConcurrent: 0        # max backends probed in parallel (0 = unbounded)

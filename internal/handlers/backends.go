@@ -10,7 +10,8 @@ import (
 )
 
 type RegisterBackendRequest struct {
-	URL string `json:"url"`
+	URL    string `json:"url"`
+	Weight uint64 `json:"weight"`
 }
 
 // BackendHandler serves the backend management API.
@@ -19,7 +20,7 @@ type BackendHandler struct {
 }
 
 type Registry interface {
-	AddNewBackend(*url.URL) (string, error)
+	AddNewBackend(*url.URL, uint64) (string, error)
 	ListBackends() []*domain.Backend
 	RemoveInstanceByID(string) bool
 }
@@ -43,12 +44,12 @@ func (h *BackendHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BackendHandler) register(w http.ResponseWriter, r *http.Request) {
-	u, err := getRegisteredURL(r)
+	u, weight, err := parseRegisterBackendReq(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id, err := h.reg.AddNewBackend(u)
+	id, err := h.reg.AddNewBackend(u, weight)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -72,12 +73,12 @@ func (h *BackendHandler) deregister(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func getRegisteredURL(r *http.Request) (*url.URL, error) {
+func parseRegisterBackendReq(r *http.Request) (*url.URL, uint64, error) {
 	defer r.Body.Close()
 
 	var req RegisterBackendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Parse the string into a *url.URL struct. url.Parse accepts relative
@@ -85,11 +86,17 @@ func getRegisteredURL(r *http.Request) (*url.URL, error) {
 	// absolute URL with both a scheme and a host.
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid url %q: %w", req.URL, err)
+		return nil, 0, fmt.Errorf("invalid url %q: %w", req.URL, err)
 	}
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return nil, fmt.Errorf("url %q must include a scheme and host", req.URL)
+		return nil, 0, fmt.Errorf("url %q must include a scheme and host", req.URL)
 	}
 
-	return parsedURL, nil
+	// A missing/zero weight defaults to 1, matching config-loaded backends.
+	weight := req.Weight
+	if weight == 0 {
+		weight = 1
+	}
+
+	return parsedURL, weight, nil
 }

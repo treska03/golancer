@@ -26,5 +26,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("client: response body: %s\n", resBody)
+	fmt.Printf("client: response body: %s", resBody)
 }

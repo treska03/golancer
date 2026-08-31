@@ -37,9 +37,27 @@ func (r *Registry) ListBackends() []*domain.Backend {
 	return nil
 }
 
+// ListHealthyBackends returns the subset of registered backends currently
+// marked healthy, in registration order. The result is a freshly allocated
+// slice, so it is safe to retain, but the backends it points to are shared and
+// must not be modified by the caller.
+func (r *Registry) ListHealthyBackends() []*domain.Backend {
+	p := r.backends.Load()
+	if p == nil {
+		return nil
+	}
+	healthy := make([]*domain.Backend, 0, len(*p))
+	for _, b := range *p {
+		if b.Healthy() {
+			healthy = append(healthy, b)
+		}
+	}
+	return healthy
+}
+
 // AddNewBackend registers a new backend for the given URL and returns its
 // generated instance ID. It fails if the URL is already registered.
-func (r *Registry) AddNewBackend(u *url.URL) (string, error) {
+func (r *Registry) AddNewBackend(u *url.URL, weight uint64) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -48,7 +66,7 @@ func (r *Registry) AddNewBackend(u *url.URL) (string, error) {
 		return "", fmt.Errorf("url %s is already registered", u.String())
 	}
 
-	b := domain.NewBackend(u)
+	b := domain.NewBackend(u, weight)
 	updated := append(slices.Clone(cur), b)
 	r.backends.Store(&updated)
 	return b.InstanceID, nil
@@ -73,4 +91,15 @@ func (r *Registry) RemoveInstanceByID(instanceID string) bool {
 	})
 	r.backends.Store(&updated)
 	return true
+}
+
+// SetHealthy updates the health flag of the backend with the given instanceID.
+func (r *Registry) SetHealthy(instanceID string, healthy bool) bool {
+	for _, b := range r.ListBackends() {
+		if b.InstanceID == instanceID {
+			b.SetHealthy(healthy)
+			return true
+		}
+	}
+	return false
 }

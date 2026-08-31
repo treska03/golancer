@@ -10,8 +10,8 @@ import (
 )
 
 // internal/server/server.go
-func New(reg *backend.Registry, pool proxy.Selector) *http.Server {
-	lb := proxy.NewHandler(pool)
+func New(reg *backend.Registry, pool proxy.Selector, mr int) *http.Server {
+	lb := proxy.NewHandler(pool, mr)
 	backends := handlers.NewBackendHandler(reg)
 
 	return &http.Server{
