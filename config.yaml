@@ -8,13 +8,25 @@ backends:
   - url: http://127.0.0.1:2315
     weight: 5
 
+# Load Balancing settings. Algorithm is selected by specifying strategy.
+# Possible strategies: 'ip-hash', 'least-connections', 'random', 'round-robin'
+balancing:
+  strategy: least-connections
+
 # Active health probing. Backends are only routed to once a probe succeeds, and
-# are evicted after unhealthyThreshold consecutive failures. All fields are
+# are evicted after unhealthy-threshold consecutive failures. All fields are
 # optional; the values below are the defaults.
 health:
-  interval: 15s            # delay between probe rounds
-  timeout: 2s             # per-probe request timeout
-  path: /healthz          # path probed on each backend (expects 2xx)
-  healthyThreshold: 1     # consecutive successes to (re)admit a backend
-  unhealthyThreshold: 3   # consecutive failures to evict a backend
-  maxConcurrent: 0        # max backends probed in parallel (0 = unbounded)
+  interval: 15s # delay between probe rounds
+  timeout: 2s # per-probe request timeout
+  path: /healthz # path probed on each backend (expects 2xx)
+  healthy-threshold: 1 # consecutive successes to (re)admit a backend
+  unhealthy-threshold: 3 # consecutive failures to evict a backend
+  max-concurrent: 0 # max backends probed in parallel (0 = unbounded)
+
+# HTTP server settings for the proxy's listener.
+server:
+  port: 8080 # port the proxy listens on
+  read-timeout: 5s # max duration for reading the entire request
+  write-timeout: 10s # max duration before timing out writes of the response
+  max-retries: 3 # max backend retries per request before returning an error

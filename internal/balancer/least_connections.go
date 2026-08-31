@@ -25,8 +25,8 @@ func (lcs *LeastConnectionsSelector) GetServer() (*domain.Backend, error) {
 		// Order by load ratio connsA/weightA vs connsB/weightB, compared via
 		// cross-multiplication to avoid floating point. cmp.Compare is used
 		// rather than a subtraction so unsigned wraparound can't flip the sign.
-		aConns := uint64(a.ActiveConnectionsNo.Load() + 1)
-		bConns := uint64(b.ActiveConnectionsNo.Load() + 1)
+		aConns := uint64(a.ActiveConnectionsNo.Load())
+		bConns := uint64(b.ActiveConnectionsNo.Load())
 		return cmp.Compare(aConns*b.Weight, bConns*a.Weight)
 	}), nil
 }
