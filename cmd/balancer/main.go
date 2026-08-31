@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/treska03/golancer/internal/backend"
-	"github.com/treska03/golancer/internal/balancer"
 	"github.com/treska03/golancer/internal/health"
-	"github.com/treska03/golancer/internal/proxy"
 	"github.com/treska03/golancer/internal/server"
 )
 
@@ -30,15 +28,14 @@ func main() {
 	}
 
 	registry := backend.NewRegistry(backends)
+	pool := cfg.ProxySelector(registry)
 
-	// 1. Initialize the Balancer with backends. Round-robin is request-agnostic,
-	//    so it's adapted to the proxy's Selector with proxy.Stateless. For sticky
-	//    per-client routing, swap in:
-	//        pool := proxy.ByClientIP(balancer.NewHashSelector(registry))
-	pool := proxy.Stateless(balancer.NewLeastConnectionsSelector(registry))
-
+	scfg, err := cfg.ServerConfig()
+	if err != nil {
+		log.Fatalf("Failed to parse proxy config: %v", err)
+	}
 	// 2. Build http server
-	s := server.New(registry, pool, 3)
+	s := server.New(registry, pool, scfg)
 
 	// 3. Active health probing. Backends start unhealthy; the prober marks them
 	//    up once they answer a probe and evicts them when they stop. Cancelled on
