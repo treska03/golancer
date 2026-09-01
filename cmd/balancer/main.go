@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os/signal"
@@ -15,7 +16,11 @@ import (
 
 func main() {
 	// 0. Load config: baseline backends and health-probing settings.
-	cfg := loadConfig("config.yaml")
+	cfgPath := flag.String("config", "config.yaml", "path to config file")
+	flag.Parse()
+
+	// 0. Load config: baseline backends and health-probing settings.
+	cfg := loadConfig(*cfgPath)
 
 	backends, err := cfg.DomainBackends()
 	if err != nil {
