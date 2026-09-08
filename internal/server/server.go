@@ -21,10 +21,11 @@ type Config struct {
 func New(reg *backend.Registry, pool proxy.Balancer, cfg *Config) *http.Server {
 	lb := proxy.NewHandler(pool, cfg.MaxRetries)
 	backends := handlers.NewBackendHandler(reg)
+	health := handlers.NewHealthHandler(reg)
 
 	return &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
-		Handler:      newRouter(backends, lb),
+		Handler:      newRouter(backends, health, lb),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 	}

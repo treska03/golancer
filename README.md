@@ -27,6 +27,8 @@ through a small management API — no restart required.
                     │  GET    /backends      → list          │
                     │  POST   /backends      → register      │
                     │  DELETE /backends/{id} → deregister    │
+                    │  GET    /healthz       → liveness      │
+                    │  GET    /readyz        → readiness     │
                     └────────────────────────────────────────┘
 ```
 
@@ -46,7 +48,7 @@ through a small management API — no restart required.
 | `internal/backend` | `Registry` — concurrency-safe add / remove / list of backends (copy-on-write). |
 | `internal/balancer` | `ServerPool` — round-robin selection over the registry's backends. |
 | `internal/proxy` | Reverse-proxy HTTP handler that forwards to the selected backend. |
-| `internal/handlers` | The `/backends` management API and the mux/router composition. |
+| `internal/handlers` | The `/backends` management API, the `/healthz` & `/readyz` probes, and the mux/router composition. |
 | `scripts/` | Local dev helpers (fake backend, traffic generator, all-in-one runner). |
 
 ## Getting started
@@ -146,6 +148,40 @@ curl -X DELETE http://localhost:8080/backends/<instanceID>
 
 - `200` on success.
 - `404` if no backend has that instance ID.
+
+## Health & readiness
+
+The balancer exposes probes for its **own** process, distinct from the
+per-backend health tracked by the registry.
+
+### Liveness
+
+```bash
+curl http://localhost:8080/healthz
+```
+
+```json
+{ "status": "ok" }
+```
+
+Always `200` while the process is serving — it does not inspect backends. A
+running balancer with zero healthy backends is still alive and should be kept
+out of rotation (see readiness), not restarted.
+
+### Readiness
+
+```bash
+curl http://localhost:8080/readyz
+```
+
+```json
+{ "status": "ready", "healthyBackends": 3 }
+```
+
+- `200` while at least one backend is healthy and therefore routable.
+- `503` when no backend is healthy (`{"status":"unavailable","healthyBackends":0}`),
+  so an upstream load balancer stops sending traffic to a balancer that can
+  serve none.
 
 ## License
 
