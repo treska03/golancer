@@ -20,19 +20,19 @@ implementation intentionally does **not** do yet. See the main
 
 ## Load balancing strategies
 
-- [ ] **Pluggable strategies.** Only round-robin exists (`ServerPool`). Add
-      alternatives (least-connections, weighted round-robin, random, IP hash)
-      behind the existing `Selector` interface.
+- [ X ] **Pluggable strategies.** Only round-robin exists (`ServerPool`). Add
+  alternatives (least-connections, weighted round-robin, random, IP hash)
+  behind the existing `Selector` interface.
 - [ X ] **Weights per backend.** Allow backends to carry a weight for
   weighted distribution.
 
 ## Configuration
 
-- [ ] **Configurable listen address.** `:8080` is hard-coded in
-      `cmd/balancer/main.go`. Make host/port configurable (config file / flag /
-      env).
-- [ ] **Configurable config path.** `config.yaml` is loaded from a fixed
-      relative path in the working directory. Accept a `-config` flag.
+- [ X ] **Configurable listen address.** `:8080` is hard-coded in
+  `cmd/balancer/main.go`. Make host/port configurable (config file / flag /
+  env).
+- [ X ] **Configurable config path.** `config.yaml` is loaded from a fixed
+  relative path in the working directory. Accept a `-config` flag.
 - [ ] **Config hot-reload.** Optionally re-read `config.yaml` on `SIGHUP`.
 
 ## Persistence
@@ -50,8 +50,10 @@ implementation intentionally does **not** do yet. See the main
       listener/port.
 - [ ] **Consistent status codes.** `register` returns `200` where `201 Created`
       would be more accurate.
-- [ ] **Health/readiness endpoints.** Add `/healthz` / `/readyz` for the
-      balancer itself.
+- [ X ] **Health/readiness endpoints.** `/healthz` (liveness — always 200 while
+  the process serves) and `/readyz` (readiness — 200 while ≥1 backend is
+  healthy, else 503) expose the balancer's own health. Served by
+  `internal/handlers/health.go`.
 
 ## Observability
 
