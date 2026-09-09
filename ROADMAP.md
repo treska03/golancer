@@ -48,8 +48,8 @@ implementation intentionally does **not** do yet. See the main
       and shares the listener with proxied traffic. Anyone who can reach the proxy
       can rewrite the backend pool. Add auth and/or move management to a separate
       listener/port.
-- [ ] **Consistent status codes.** `register` returns `200` where `201 Created`
-      would be more accurate.
+- [ X ] **Consistent status codes.** `register` returns `200` where `201 Created`
+  would be more accurate.
 - [ X ] **Health/readiness endpoints.** `/healthz` (liveness — always 200 while
   the process serves) and `/readyz` (readiness — 200 while ≥1 backend is
   healthy, else 503) expose the balancer's own health. Served by

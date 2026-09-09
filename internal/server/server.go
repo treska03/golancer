@@ -4,28 +4,19 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/treska03/golancer/internal/backend"
-	"github.com/treska03/golancer/internal/handlers"
-	"github.com/treska03/golancer/internal/proxy"
 )
 
 type Config struct {
 	Port         int
-	MaxRetries   int
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 }
 
 // internal/server/server.go
-func New(reg *backend.Registry, pool proxy.Balancer, cfg *Config) *http.Server {
-	lb := proxy.NewHandler(pool, cfg.MaxRetries)
-	backends := handlers.NewBackendHandler(reg)
-	health := handlers.NewHealthHandler(reg)
-
+func New(cfg *Config, registrars ...RouteRegistrar) *http.Server {
 	return &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
-		Handler:      newRouter(backends, health, lb),
+		Handler:      newRouter(registrars...),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 	}
