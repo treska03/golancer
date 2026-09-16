@@ -26,6 +26,9 @@ func main() {
 	// Make sure nothing from a previous run is still squatting on the
 	// proxy's port before we launch anything.
 	freePort(8080)
+	freePort(8081)
+
+	time.Sleep(3 * time.Second)
 
 	g, ctx := errgroup.WithContext(ctx)
 
