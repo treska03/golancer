@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/treska03/golancer/internal/backend"
@@ -13,29 +14,46 @@ import (
 	"github.com/treska03/golancer/internal/server"
 )
 
-func bootstrapServer(ctx context.Context, reg *backend.Registry, cfg *config.Config) {
+// startRegistryServer builds the registry server (the backend
+// (de)registration API) and starts it in the background.
+func startRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, cfg *config.Config) {
+	regHandler := handlers.NewBackendHandler(reg)
+
+	registryServer := server.New(cfg.RegistryConfig(), regHandler)
+	startServer(ctx, wg, registryServer)
+}
+
+// startBalancerServer builds the load-balancer server (proxy + health endpoint)
+// and starts it in the background.
+func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, cfg *config.Config) {
 	pool := cfg.ProxySelector(reg)
-	lbHandler := proxy.NewHandler(pool, cfg.Server.Balancer.MaxRetries) // todo: think about how we access it
+	lbHandler := proxy.NewHandler(pool, cfg.Server.Balancer.MaxRetries)
 	healthHandler := handlers.NewHealthHandler(reg)
 
 	balancerServer := server.New(cfg.BalancerConfig(), lbHandler, healthHandler)
+	startServer(ctx, wg, balancerServer)
+}
 
+// startServer runs srv in the background and shuts it down gracefully when ctx
+// is cancelled. wg is incremented for the lifetime of the server and marked
+// done once it has fully stopped, so callers can wait for a clean drain.
+func startServer(ctx context.Context, wg *sync.WaitGroup, srv *http.Server) {
 	// Graceful shutdown: when signalled, stop accepting connections and let
 	// in-flight requests drain. Closing the server unblocks ListenAndServe.
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := balancerServer.Shutdown(shutCtx); err != nil {
+		if err := srv.Shutdown(shutCtx); err != nil {
 			log.Printf("graceful shutdown failed: %v", err)
 		}
 	}()
 
-	go func() {
-		log.Printf("Listener running on %s", balancerServer.Addr)
-		if err := balancerServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	wg.Go(func() {
+		log.Printf("Listener running on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
-		log.Println("load balancer stopped")
-	}()
+		log.Printf("server on %s stopped", srv.Addr)
+	})
 }

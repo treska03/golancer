@@ -32,7 +32,6 @@ server:
     write-timeout: 10s # max duration before timing out writes of the response
     max-retries: 3 # max backend retries per request before returning an error
   registry:
-    port: 8081 # port the proxy listens on
+    port: 8081 # port the registry API listens on
     read-timeout: 5s # max duration for reading the entire request
     write-timeout: 10s # max duration before timing out writes of the response
-    max-retries: 3 # max backend retries per request before returning an error
