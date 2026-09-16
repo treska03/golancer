@@ -125,6 +125,9 @@ func main() {
 	port := int(2115 + 100*(instanceID-1))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// simulate request taking longer time
+		time.Sleep(100 * time.Millisecond)
+
 		mu.Lock()
 		count++
 		currentCount := count
