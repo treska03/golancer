@@ -20,14 +20,11 @@ const (
 
 type (
 	Config struct {
-		Balancer BalancerSettings  `yaml:"balancing"`
-		Backends []BackendSettings `yaml:"backends"`
-		Health   HealthSettings    `yaml:"health"`
-		Server   ServerSettings    `yaml:"server"`
-	}
-
-	BalancerSettings struct {
-		Strategy string `yaml:"strategy"`
+		Backends      []BackendSettings     `yaml:"backends"`
+		Balancer      BalancerSettings      `yaml:"balancing"`
+		Health        HealthSettings        `yaml:"health"`
+		Discovery     DiscoverySettings     `yaml:"discovery"`
+		Observability ObservabilitySettings `yaml:"observability"`
 	}
 
 	BackendSettings struct {
@@ -35,32 +32,47 @@ type (
 		Weight uint64 `yaml:"weight"`
 	}
 
+	BalancerSettings struct {
+		Strategy   string         `yaml:"strategy"`
+		MaxRetries int            `yaml:"max-retries"`
+		Server     ServerSettings `yaml:"server"`
+	}
+
 	HealthSettings struct {
-		Interval           string `yaml:"interval"`
-		Timeout            string `yaml:"timeout"`
-		Path               string `yaml:"path"`
-		HealthyThreshold   int    `yaml:"healthy-threshold"`
-		UnhealthyThreshold int    `yaml:"unhealthy-threshold"`
-		MaxConcurrent      int    `yaml:"max-concurrent"`
+		Interval           string               `yaml:"interval"`
+		HealthyThreshold   int                  `yaml:"healthy-threshold"`
+		UnhealthyThreshold int                  `yaml:"unhealthy-threshold"`
+		MaxConcurrent      int                  `yaml:"max-concurrent"`
+		Client             HealthClientSettings `yaml:"client"`
 	}
 
+	HealthClientSettings struct {
+		Timeout string `yaml:"timeout"`
+		Path    string `yaml:"path"`
+	}
+
+	DiscoverySettings struct {
+		Mode     string           `yaml:"mode"`
+		Registry RegistrySettings `yaml:"registry"`
+	}
+
+	RegistrySettings struct {
+		Server ServerSettings `yaml:"server"`
+	}
+
+	ObservabilitySettings struct {
+		Metrics MetricsSettings `yaml:"metrics"`
+	}
+
+	MetricsSettings struct {
+		Server ServerSettings `yaml:"server"`
+	}
+
+	// ServerSettings holds the HTTP listener settings shared by every
+	// server the application exposes.
 	ServerSettings struct {
-		Balancer BalancerServerSettings `yaml:"balancer"`
-		Registry RegistryServerSettings `yaml:"registry"`
-	}
-
-	BaseServerSettings struct {
 		Port         int    `yaml:"port"`
 		ReadTimeout  string `yaml:"read-timeout"`
 		WriteTimeout string `yaml:"write-timeout"`
-	}
-
-	BalancerServerSettings struct {
-		BaseServerSettings `yaml:",inline"`
-		MaxRetries         int `yaml:"max-retries"`
-	}
-
-	RegistryServerSettings struct {
-		BaseServerSettings `yaml:",inline"`
 	}
 )

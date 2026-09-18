@@ -39,9 +39,9 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("invalid health.interval %q: %w", s, err))
 		}
 	}
-	if s := c.Health.Timeout; s != "" {
+	if s := c.Health.Client.Timeout; s != "" {
 		if _, err := time.ParseDuration(s); err != nil {
-			errs = append(errs, fmt.Errorf("invalid health.timeout %q: %w", s, err))
+			errs = append(errs, fmt.Errorf("invalid health.client.timeout %q: %w", s, err))
 		}
 	}
 	if c.Health.HealthyThreshold < 0 {
@@ -55,7 +55,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Server Settings Validation
-	validateBaseServer := func(prefix string, s BaseServerSettings) {
+	validateServer := func(prefix string, s ServerSettings) {
 		if s.Port < 0 || s.Port > 65535 {
 			errs = append(errs, fmt.Errorf("invalid %s.port %d (must be 0-65535)", prefix, s.Port))
 		}
@@ -71,11 +71,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	validateBaseServer("server.balancer", c.Server.Balancer.BaseServerSettings)
-	validateBaseServer("server.registry", c.Server.Registry.BaseServerSettings)
+	validateServer("balancing.server", c.Balancer.Server)
+	validateServer("discovery.registry.server", c.Discovery.Registry.Server)
+	validateServer("observability.metrics.server", c.Observability.Metrics.Server)
 
-	if c.Server.Balancer.MaxRetries < 0 {
-		errs = append(errs, fmt.Errorf("invalid server.balancer.max-retries %d: must be >= 0", c.Server.Balancer.MaxRetries))
+	if c.Balancer.MaxRetries < 0 {
+		errs = append(errs, fmt.Errorf("invalid balancing.max-retries %d: must be >= 0", c.Balancer.MaxRetries))
 	}
 
 	if len(errs) > 0 {

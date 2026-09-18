@@ -59,9 +59,9 @@ implementation intentionally does **not** do yet. See the main
 
 - [ ] **Structured logging.** Currently uses the standard `log` package with
       ad-hoc messages. Move to structured logging (e.g. `log/slog`).
-- [ ] **Metrics.** Expose request counts, per-backend distribution, error
+- [ X ] **Metrics.** Expose request counts, per-backend distribution, error
       rates, latencies (e.g. Prometheus).
-- [ ] **Request logging / tracing.** Log or trace proxied requests with the
+- [ X ] **Request logging / tracing.** Log or trace proxied requests with the
       chosen backend.
 
 ## Proxying

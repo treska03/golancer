@@ -67,7 +67,7 @@ func (c *Config) ProxySelector(reg *backend.Registry) proxy.Balancer {
 // HealthConfig converts the YAML health settings into health.Config.
 func (c *Config) HealthConfig() *health.Config {
 	out := &health.Config{
-		Path:               c.Health.Path,
+		Path:               c.Health.Client.Path,
 		HealthyThreshold:   c.Health.HealthyThreshold,
 		UnhealthyThreshold: c.Health.UnhealthyThreshold,
 		MaxConcurrent:      c.Health.MaxConcurrent,
@@ -75,13 +75,13 @@ func (c *Config) HealthConfig() *health.Config {
 	if s := c.Health.Interval; s != "" {
 		out.Interval, _ = time.ParseDuration(s)
 	}
-	if s := c.Health.Timeout; s != "" {
+	if s := c.Health.Client.Timeout; s != "" {
 		out.Timeout, _ = time.ParseDuration(s)
 	}
 	return out
 }
 
-func (c *Config) serverConfig(s BaseServerSettings) *server.Config {
+func (c *Config) serverConfig(s ServerSettings) *server.Config {
 	out := &server.Config{
 		Port:         DefaultServerPort,
 		ReadTimeout:  DefaultServerReadTimeout,
@@ -101,9 +101,13 @@ func (c *Config) serverConfig(s BaseServerSettings) *server.Config {
 }
 
 func (c *Config) BalancerConfig() *server.Config {
-	return c.serverConfig(c.Server.Balancer.BaseServerSettings)
+	return c.serverConfig(c.Balancer.Server)
 }
 
 func (c *Config) RegistryConfig() *server.Config {
-	return c.serverConfig(c.Server.Registry.BaseServerSettings)
+	return c.serverConfig(c.Discovery.Registry.Server)
+}
+
+func (c *Config) MetricsConfig() *server.Config {
+	return c.serverConfig(c.Observability.Metrics.Server)
 }

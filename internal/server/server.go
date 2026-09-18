@@ -12,11 +12,16 @@ type Config struct {
 	WriteTimeout time.Duration
 }
 
-// internal/server/server.go
-func New(cfg *Config, registrars ...RouteRegistrar) *http.Server {
+type Middleware func(next http.Handler) http.Handler
+
+func New(cfg *Config, middleware Middleware, registrars ...RouteRegistrar) *http.Server {
+	h := newRouter(registrars...)
+	if middleware != nil {
+		h = middleware(h)
+	}
 	return &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
-		Handler:      newRouter(registrars...),
+		Handler:      h,
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 	}
