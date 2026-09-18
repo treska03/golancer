@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/treska03/golancer/internal/backend"
 	"github.com/treska03/golancer/internal/config"
 	"github.com/treska03/golancer/internal/handlers"
@@ -14,23 +15,31 @@ import (
 	"github.com/treska03/golancer/internal/server"
 )
 
+// startMetricsRegistryServer builds the prometheus metrics server
+func startMetricsRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *prometheus.Registry, mw server.Middleware, cfg *config.Config) {
+	regHandler := handlers.NewPrometheusHandler(reg, cfg.MetricsConfig())
+	regServer := server.New(cfg.MetricsConfig(), mw, regHandler)
+
+	startServer(ctx, wg, regServer)
+}
+
 // startRegistryServer builds the registry server (the backend
 // (de)registration API) and starts it in the background.
-func startRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, cfg *config.Config) {
+func startRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, mw server.Middleware, cfg *config.Config) {
 	regHandler := handlers.NewBackendHandler(reg)
 
-	registryServer := server.New(cfg.RegistryConfig(), regHandler)
+	registryServer := server.New(cfg.RegistryConfig(), mw, regHandler)
 	startServer(ctx, wg, registryServer)
 }
 
 // startBalancerServer builds the load-balancer server (proxy + health endpoint)
 // and starts it in the background.
-func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, cfg *config.Config) {
+func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, mw server.Middleware, cfg *config.Config) {
 	pool := cfg.ProxySelector(reg)
-	lbHandler := proxy.NewHandler(pool, cfg.Server.Balancer.MaxRetries)
+	lbHandler := proxy.NewHandler(pool, cfg.Balancer.MaxRetries)
 	healthHandler := handlers.NewHealthHandler(reg)
 
-	balancerServer := server.New(cfg.BalancerConfig(), lbHandler, healthHandler)
+	balancerServer := server.New(cfg.BalancerConfig(), mw, lbHandler, healthHandler)
 	startServer(ctx, wg, balancerServer)
 }
 

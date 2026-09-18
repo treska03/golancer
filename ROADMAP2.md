@@ -1,0 +1,7 @@
+- TLS termination, SNI routing, cert reloading, OCSP stapling
+- HTTP/2 and HTTP/3 (QUIC), gRPC, WebSocket upgrades
+- Connection pooling, keepalive reuse, and backpressure so a slow backend doesn't sink you
+- Graceful config reload with zero dropped connections (this one is deceptively brutal)
+- Active and passive health checks, circuit breaking, outlier ejection, retries with budgets, timeouts, hedging
+- Defenses against slowloris, malformed requests, header smuggling, and every other adversarial input from the open internet
+- Load shedding under overload, and raw performance work (event loops, splice/zero-copy)

@@ -11,6 +11,7 @@ import (
 	"github.com/treska03/golancer/internal/backend"
 	"github.com/treska03/golancer/internal/config"
 	"github.com/treska03/golancer/internal/health"
+	"github.com/treska03/golancer/internal/metrics"
 )
 
 // Run loads the config, starts the registry and balancer servers plus the
@@ -21,15 +22,21 @@ func Run() {
 
 	reg := backend.NewRegistry(cfg.DomainBackends())
 
+	// Shared request metrics, registered once and mounted on every server via
+	// the metrics middleware.
+	metricsReg := metrics.NewRegistry()
+	mw := commonMiddleware(metrics.NewCommon(metricsReg))
+
 	// Cancelled on SIGINT/SIGTERM; drives graceful shutdown of both servers.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	var wg sync.WaitGroup
 
-	startRegistryServer(ctx, &wg, reg, cfg) // backend (de)registration API
-	startBalancerServer(ctx, &wg, reg, cfg) // proxies traffic + health endpoint
-	runProber(ctx, reg, cfg)                // active health probing
+	startMetricsRegistryServer(ctx, &wg, metricsReg, mw, cfg) // prometheus metrics registry
+	startRegistryServer(ctx, &wg, reg, mw, cfg)               // backend (de)registration API
+	startBalancerServer(ctx, &wg, reg, mw, cfg)               // proxies traffic + health endpoint
+	runProber(ctx, reg, cfg)                                  // active health probing
 
 	// Block until signalled and both servers have finished draining.
 	wg.Wait()
