@@ -22,9 +22,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-# Binary and a default config (override by mounting your own at /app/config.yaml).
 COPY --from=build /out/golancer /app/golancer
-COPY config.yaml /app/config.yaml
 
 # proxy / registry API / metrics
 EXPOSE 8080 8081 2112
@@ -32,4 +30,4 @@ EXPOSE 8080 8081 2112
 USER nonroot:nonroot
 
 ENTRYPOINT ["/app/golancer"]
-CMD ["-config", "/app/config.yaml"]
+CMD []
