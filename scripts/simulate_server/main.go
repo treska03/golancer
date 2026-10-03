@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,14 +19,98 @@ import (
 	"time"
 )
 
-var (
-	count int = 0
+// server is a single simulated backend listening on one port. Each instance
+// keeps its own visit counter and health flag so multiple backends spun up in
+// the same process behave independently.
+type server struct {
+	instanceID int64
+	port       int
+
 	mu    sync.Mutex
+	count int
 
 	// healthy backs the /healthz endpoint. Flip it at runtime via /toggle-health
 	// to watch the balancer evict and re-admit this instance.
 	healthy atomic.Bool
-)
+}
+
+// routes builds the HTTP handler for this backend. Each server gets its own mux
+// so its counter, health flag and instance id stay independent of the others.
+func (s *server) routes() http.Handler {
+	mux := http.NewServeMux()
+
+	// /bad_route always returns 404, for testing error handling. Registered
+	// before "/" so it takes precedence over the catch-all handler.
+	mux.HandleFunc("/bad_route", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// simulate request taking longer time
+		time.Sleep(100 * time.Millisecond)
+
+		s.mu.Lock()
+		s.count++
+		currentCount := s.count
+		slog.Info(fmt.Sprintf("Request received: URL: %s", r.URL))
+		s.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"instance_id": s.instanceID,
+			"port":        s.port,
+			"visits":      currentCount,
+		})
+	})
+
+	// Health endpoint probed by the balancer. Returns 200 when healthy, 503
+	// otherwise.
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if s.healthy.Load() {
+			w.WriteHeader(http.StatusOK)
+			io.WriteString(w, "ok")
+			return
+		}
+		http.Error(w, "unhealthy", http.StatusServiceUnavailable)
+	})
+
+	// Flip health at runtime for manual testing.
+	mux.HandleFunc("/toggle-health", func(w http.ResponseWriter, r *http.Request) {
+		now := !s.healthy.Load()
+		s.healthy.Store(now)
+		log.Printf("server %d (:%d) health toggled: healthy=%v", s.instanceID, s.port, now)
+		fmt.Fprintf(w, "healthy=%v\n", now)
+	})
+
+	return mux
+}
+
+// serve claims the port (killing any stale holder) and blocks serving requests.
+func (s *server) serve() error {
+	freePort(s.port)
+	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
+	ln := listenWhenFree(addr)
+	log.Printf("Starting server %d on :%d...", s.instanceID, s.port)
+	return http.Serve(ln, s.routes())
+}
+
+// parsePorts turns a comma-separated list like "2115,2215,2315" into port
+// numbers, skipping blanks and rejecting anything that isn't a valid TCP port.
+func parsePorts(s string) ([]int, error) {
+	var ports []int
+	for _, field := range strings.Split(s, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		p, err := strconv.Atoi(field)
+		if err != nil || p < 1 || p > 65535 {
+			return nil, fmt.Errorf("invalid port %q", field)
+		}
+		ports = append(ports, p)
+	}
+	return ports, nil
+}
 
 // portPIDs returns the PIDs of any processes currently listening on the
 // given TCP port, using whatever lookup tool is native to the OS.
@@ -115,55 +200,40 @@ func freePort(port int) {
 }
 
 func main() {
-	// Define the command-line flag (defaulting to "instance-1" if omitted)
-	ptrID := flag.Int64("id", 1, "Instance ID of the server")
+	ptrID := flag.Int64("id", 1, "Base instance ID (used when -ports is omitted, and as the starting id when it is)")
+	portsFlag := flag.String("ports", "", "Comma-separated list of ports to serve on (e.g. 2115,2215). Overrides -id-derived port.")
 	startHealthy := flag.Bool("healthy", true, "Whether /healthz reports 200 at startup")
 	flag.Parse()
-	instanceID := *ptrID
-	healthy.Store(*startHealthy)
 
-	port := int(2115 + 100*(instanceID-1))
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// simulate request taking longer time
-		time.Sleep(100 * time.Millisecond)
-
-		mu.Lock()
-		count++
-		currentCount := count
-		mu.Unlock()
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"instance_id": instanceID,
-			"visits":      currentCount,
-		})
-	})
-
-	// Health endpoint probed by the balancer. Returns 200 when healthy, 503
-	// otherwise.
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if healthy.Load() {
-			w.WriteHeader(http.StatusOK)
-			io.WriteString(w, "ok")
-			return
+	// Determine which ports to serve. An explicit -ports list wins; otherwise
+	// fall back to the single id-derived port for backward compatibility.
+	var ports []int
+	if *portsFlag != "" {
+		var err error
+		ports, err = parsePorts(*portsFlag)
+		if err != nil {
+			log.Fatalf("invalid -ports: %v", err)
 		}
-		http.Error(w, "unhealthy", http.StatusServiceUnavailable)
-	})
+	}
+	if len(ports) == 0 {
+		ports = []int{int(2115 + 100*(*ptrID-1))}
+	}
 
-	// Flip health at runtime for manual testing.
-	http.HandleFunc("/toggle-health", func(w http.ResponseWriter, r *http.Request) {
-		now := !healthy.Load()
-		healthy.Store(now)
-		log.Printf("server %d health toggled: healthy=%v", instanceID, now)
-		fmt.Fprintf(w, "healthy=%v\n", now)
-	})
+	// Spin up one backend per port, each in its own goroutine. Instance ids are
+	// assigned sequentially from -id so every backend reports a distinct id.
+	var wg sync.WaitGroup
+	for i, port := range ports {
+		s := &server{
+			instanceID: *ptrID + int64(i),
+			port:       port,
+		}
+		s.healthy.Store(*startHealthy)
 
-	freePort(port)
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	ln := listenWhenFree(addr)
-
-	log.Printf("Starting server %d on :%d...", instanceID, port)
-	log.Fatal(http.Serve(ln, nil))
+		wg.Add(1)
+		go func(s *server) {
+			defer wg.Done()
+			log.Fatal(s.serve())
+		}(s)
+	}
+	wg.Wait()
 }

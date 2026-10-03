@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# Image for scripts/simulate_server — a tiny backend that exposes /,
+# /bad_route, /healthz and /toggle-health. It can serve several ports at once
+# (one independent backend per port). Intended to run as a sidecar in a pod so
+# the main container can reach it over localhost.
+#
+# Ports: pass "-ports 2115,2215,..." to serve a specific list, or "-id N" to
+# serve a single id-derived port (2115 + 100*(N-1)). Remember to EXPOSE / list
+# every served port in the pod spec.
+#
+# NOTE: the server binds to 127.0.0.1, so it is only reachable from within the
+# same network namespace. Sidecars in a pod share that namespace, so localhost
+# works; it is NOT reachable via a Service from other pods.
+
+# ---- Build stage ----
+FROM golang:1.26.6 AS build
+
+WORKDIR /src
+
+# Download dependencies first to leverage layer caching.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Build the statically linked binary.
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux \
+    go build -trimpath -ldflags="-s -w" -o /out/simulate_server ./scripts/simulate_server
+
+# ---- Runtime stage ----
+FROM gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /app
+
+COPY --from=build /out/simulate_server /app/simulate_server
+
+# Default: id 1 -> port 2115. Override with "-ports a,b,c" or "-id N" at runtime
+# and expose the matching port(s) in the pod spec.
+EXPOSE 2115
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/app/simulate_server"]
+CMD ["-id", "1"]

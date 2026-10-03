@@ -1,0 +1,235 @@
+# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+replicaCount: 1
+
+golancer:
+  backends:
+    - url: http://127.0.0.1:2115
+      weight: 2
+    - url: http://127.0.0.1:2215
+      weight: 3
+    - url: http://127.0.0.1:2315
+      weight: 5
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: golancer
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+# Sidecar running scripts/simulate_server (docker/Dockerfile.simulate) so the
+# pod has backends to balance across without any external services. It binds to
+# 127.0.0.1, so ports must match the backends in config.yaml baked into the image.
+simulate:
+  enabled: true
+  image:
+    repository: golancer-simulate
+    pullPolicy: IfNotPresent
+    tag: latest
+  # Comma-separated list; one independent backend per port.
+  ports: "2115,2215,2315"
+  resources: {}
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  port: 8080
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# -- Expose the service via gateway-api HTTPRoute
+# Requires Gateway API resources and suitable controller installed within the cluster
+# (see: https://gateway-api.sigs.k8s.io/guides/)
+httpRoute:
+  # HTTPRoute enabled.
+  enabled: false
+  # HTTPRoute annotations.
+  annotations: {}
+  # Which Gateways this Route is attached to.
+  parentRefs:
+  - name: gateway
+    sectionName: http
+    # namespace: default
+  # Hostnames matching HTTP header.
+  hostnames:
+  - chart-example.local
+  # List of rules and filters applied.
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /headers
+  #   filters:
+  #   - type: RequestHeaderModifier
+  #     requestHeaderModifier:
+  #       set:
+  #       - name: My-Overwrite-Header
+  #         value: this-is-the-only-value
+  #       remove:
+  #       - User-Agent
+  # - matches:
+  #   - path:
+  #       type: PathPrefix
+  #       value: /echo
+  #     headers:
+  #     - name: version
+  #       value: v2
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+# Currently disabled
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: golancer-config
+    configMap:
+      name: golancer-config
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: golancer-config
+    mountPath: "/etc/golancer"
+    readOnly: true
+
+# Arguments for the golancer container (overrides the image CMD). Points the
+# binary at the config.yaml mounted from the golancer-config ConfigMap.
+args: ["-config", "/etc/golancer/config.yaml"]
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# ConfigMaps to create, keyed by name. Each data key is a file name; give it
+# a string (used verbatim) or structured YAML (serialised for you).
+configMaps:
+  golancer-config:
+    data:
+      config.yaml:
+        # Baseline backend servers loaded into the pool on startup.
+        # Additional backends can still be registered at runtime via the API.
+        backends:
+          - url: http://127.0.0.1:2115
+            weight: 2
+          - url: http://127.0.0.1:2215
+            weight: 3
+          - url: http://127.0.0.1:2315
+            weight: 5
+
+        # Load Balancing settings. Algorithm is selected by specifying strategy.
+        # Possible strategies: 'ip-hash', 'least-connections', 'random', 'round-robin'
+        balancing:
+          strategy: least-connections
+          max-retries: 3 # max backend retries per request before returning an error
+          server:
+            port: 8080 # port the proxy listens on
+            read-timeout: 5s # max duration for reading the entire request
+            write-timeout: 10s # max duration before timing out writes of the response
+
+        # Active health probing. Backends are only routed to once a probe succeeds, and
+        # are evicted after unhealthy-threshold consecutive failures.
+        health:
+          interval: 15s # delay between probe rounds
+          healthy-threshold: 1 # consecutive successes to (re)admit a backend
+          unhealthy-threshold: 3 # consecutive failures to evict a backend
+          max-concurrent: 0 # max backends probed in parallel (0 = unbounded)
+          client:
+            timeout: 2s # per-probe request timeout
+            path: /healthz # path probed on each backend (expects 2xx)
+
+        discovery:
+          mode: self-registration # possible modes: self-registration
+          registry:
+            server:
+              port: 8081 # port the registry API listens on
+              read-timeout: 5s # max duration for reading the entire request
+              write-timeout: 10s # max duration before timing out writes of the response
+
+        observability:
+          metrics:
+            server:
+              port: 2112 # port the metrics registry API listens on
+              read-timeout: 5s # max duration for reading the entire request
+              write-timeout: 10s # max duration before timing out writes of the response

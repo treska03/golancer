@@ -20,10 +20,6 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf("unknown balancing strategy %q", c.Balancer.Strategy))
 	}
 
-	// Backends Validation
-	if len(c.Backends) == 0 {
-		errs = append(errs, errors.New("at least one backend must be specified"))
-	}
 	for i, backend := range c.Backends {
 		u, err := url.Parse(backend.URL)
 		if err != nil {

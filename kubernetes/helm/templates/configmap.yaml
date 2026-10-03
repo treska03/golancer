@@ -1,0 +1,13 @@
+{{- range $name, $cm := .Values.configMaps }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "golancer.labels" $ | nindent 4 }}
+data: 
+  {{- range $file, $content := $cm.data }}
+  {{ $file }}: |
+    {{- toYaml $content | nindent 4 }}
+  {{- end }}
+{{- end }}
