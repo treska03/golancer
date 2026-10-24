@@ -25,7 +25,8 @@ func Run() {
 	// Shared request metrics, registered once and mounted on every server via
 	// the metrics middleware.
 	metricsReg := metrics.NewRegistry()
-	mw := commonMiddleware(metrics.NewCommon(metricsReg))
+	mw := commonMiddleware(metrics.NewCommon(metricsReg), cfg.ProxyBodyLimit())
+	authMW := bearerAuth(cfg.RegistryToken())
 
 	// Cancelled on SIGINT/SIGTERM; drives graceful shutdown of both servers.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -33,10 +34,10 @@ func Run() {
 
 	var wg sync.WaitGroup
 
-	startMetricsRegistryServer(ctx, &wg, metricsReg, mw, cfg) // prometheus metrics registry
-	startRegistryServer(ctx, &wg, reg, mw, cfg)               // backend (de)registration API
-	startBalancerServer(ctx, &wg, reg, mw, cfg)               // proxies traffic + health endpoint
-	runProber(ctx, reg, cfg)                                  // active health probing
+	startMetricsRegistryServer(ctx, &wg, metricsReg, mw, cfg)  // prometheus metrics registry
+	startRegistryServer(ctx, &wg, reg, chain(mw, authMW), cfg) // backend (de)registration API (auth inside metrics)
+	startBalancerServer(ctx, &wg, reg, mw, cfg)                // proxies traffic + health endpoint
+	runProber(ctx, reg, cfg)                                   // active health probing
 
 	// Block until signalled and both servers have finished draining.
 	wg.Wait()

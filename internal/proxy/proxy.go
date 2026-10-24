@@ -80,6 +80,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Note: sticky balancers select deterministically, so a reachable-but-failing
 	// backend gets re-selected each attempt until the prober evicts it.
 	for attempt := 0; attempt <= h.MaxRetries; attempt++ {
+		if r.Context().Err() != nil {
+			return
+		}
+
 		if r.GetBody != nil {
 			body, err := r.GetBody()
 			if err != nil {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/treska03/golancer/internal/domain"
 )
 
 // Validate collects all invalid values in the Config and returns them as a single error.
@@ -26,6 +28,11 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("backends.%d invalid url %q: %w", i, backend.URL, err))
 		} else if u.Scheme == "" || u.Host == "" {
 			errs = append(errs, fmt.Errorf("backends.%d url %q must include a scheme and host", i, backend.URL))
+		} else if u.Scheme != "http" && u.Scheme != "https" {
+			errs = append(errs, fmt.Errorf("backends.%d url %q must use http or https", i, backend.URL))
+		}
+		if backend.Weight > domain.MaxWeight {
+			errs = append(errs, fmt.Errorf("backends.%d weight %d exceeds maximum %d", i, backend.Weight, domain.MaxWeight))
 		}
 	}
 

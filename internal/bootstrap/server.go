@@ -44,19 +44,21 @@ func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.R
 }
 
 // startServer runs srv in the background and shuts it down gracefully when ctx
-// is cancelled. wg is incremented for the lifetime of the server and marked
-// done once it has fully stopped, so callers can wait for a clean drain.
+// is cancelled. wg tracks both the listener and the shutdown goroutine, so it is
+// only done once in-flight requests have drained (or the drain timed out).
 func startServer(ctx context.Context, wg *sync.WaitGroup, srv *http.Server) {
 	// Graceful shutdown: when signalled, stop accepting connections and let
-	// in-flight requests drain. Closing the server unblocks ListenAndServe.
-	go func() {
+	// in-flight requests drain. ListenAndServe returns as soon as Shutdown is
+	// called, not when draining finishes, so this goroutine must be waited on
+	// too or the process would exit mid-drain.
+	wg.Go(func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutCtx); err != nil {
 			log.Printf("graceful shutdown failed: %v", err)
 		}
-	}()
+	})
 
 	wg.Go(func() {
 		log.Printf("Listener running on %s", srv.Addr)

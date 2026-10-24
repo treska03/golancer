@@ -108,6 +108,14 @@ func (c *Config) RegistryConfig() *server.Config {
 	return c.serverConfig(c.Discovery.Registry.Server)
 }
 
+func (c *Config) RegistryToken() string {
+	return os.Getenv("GOLANCER_REGISTRY_TOKEN")
+}
+
 func (c *Config) MetricsConfig() *server.Config {
 	return c.serverConfig(c.Observability.Metrics.Server)
+}
+
+func (c *Config) ProxyBodyLimit() int64 {
+	return int64(c.Proxy.BodyLimit)
 }

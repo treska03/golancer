@@ -25,6 +25,7 @@ type (
 		Health        HealthSettings        `yaml:"health"`
 		Discovery     DiscoverySettings     `yaml:"discovery"`
 		Observability ObservabilitySettings `yaml:"observability"`
+		Proxy         ProxySettings         `yaml:"proxy"`
 	}
 
 	BackendSettings struct {
@@ -74,5 +75,9 @@ type (
 		Port         int    `yaml:"port"`
 		ReadTimeout  string `yaml:"read-timeout"`
 		WriteTimeout string `yaml:"write-timeout"`
+	}
+
+	ProxySettings struct {
+		BodyLimit int `yaml:"body-limit"`
 	}
 )
