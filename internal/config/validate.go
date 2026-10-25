@@ -37,16 +37,23 @@ func (c *Config) Validate() error {
 	}
 
 	// Health Validation
-	if s := c.Health.Interval; s != "" {
-		if _, err := time.ParseDuration(s); err != nil {
-			errs = append(errs, fmt.Errorf("invalid health.interval %q: %w", s, err))
+	// validateDuration accepts an empty (unset) value; otherwise it must parse
+	// and be non-negative. Negative values would otherwise slip through:
+	// time.NewTicker panics on them, and a negative timeout means none at all.
+	validateDuration := func(field, s string) {
+		if s == "" {
+			return
+		}
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("invalid %s %q: %w", field, s, err))
+		} else if d < 0 {
+			errs = append(errs, fmt.Errorf("invalid %s %q: must not be negative", field, s))
 		}
 	}
-	if s := c.Health.Client.Timeout; s != "" {
-		if _, err := time.ParseDuration(s); err != nil {
-			errs = append(errs, fmt.Errorf("invalid health.client.timeout %q: %w", s, err))
-		}
-	}
+
+	validateDuration("health.interval", c.Health.Interval)
+	validateDuration("health.client.timeout", c.Health.Client.Timeout)
 	if c.Health.HealthyThreshold < 0 {
 		errs = append(errs, fmt.Errorf("invalid health.healthy-threshold %d: must be >= 0", c.Health.HealthyThreshold))
 	}
@@ -58,28 +65,32 @@ func (c *Config) Validate() error {
 	}
 
 	// Server Settings Validation
-	validateServer := func(prefix string, s ServerSettings) {
+	// usedPorts maps each effective (post-default) port to the server that
+	// claimed it, so two servers resolving to the same port fail validation
+	// instead of crashing with "address already in use" at startup.
+	usedPorts := map[int]string{}
+	validateServer := func(prefix string, s ServerSettings, defaultPort int) {
 		if s.Port < 0 || s.Port > 65535 {
 			errs = append(errs, fmt.Errorf("invalid %s.port %d (must be 0-65535)", prefix, s.Port))
+		} else if p := s.portOr(defaultPort); usedPorts[p] != "" {
+			errs = append(errs, fmt.Errorf("%s.port %d is already used by %s", prefix, p, usedPorts[p]))
+		} else {
+			usedPorts[p] = prefix
 		}
-		if s.ReadTimeout != "" {
-			if _, err := time.ParseDuration(s.ReadTimeout); err != nil {
-				errs = append(errs, fmt.Errorf("invalid %s.read-timeout %q: %w", prefix, s.ReadTimeout, err))
-			}
-		}
-		if s.WriteTimeout != "" {
-			if _, err := time.ParseDuration(s.WriteTimeout); err != nil {
-				errs = append(errs, fmt.Errorf("invalid %s.write-timeout %q: %w", prefix, s.WriteTimeout, err))
-			}
-		}
+		validateDuration(prefix+".read-timeout", s.ReadTimeout)
+		validateDuration(prefix+".write-timeout", s.WriteTimeout)
 	}
 
-	validateServer("balancing.server", c.Balancer.Server)
-	validateServer("discovery.registry.server", c.Discovery.Registry.Server)
-	validateServer("observability.metrics.server", c.Observability.Metrics.Server)
+	validateServer("balancing.server", c.Balancer.Server, DefaultBalancerPort)
+	validateServer("discovery.registry.server", c.Discovery.Registry.Server, DefaultRegistryPort)
+	validateServer("observability.metrics.server", c.Observability.Metrics.Server, DefaultMetricsPort)
 
 	if c.Balancer.MaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("invalid balancing.max-retries %d: must be >= 0", c.Balancer.MaxRetries))
+	}
+
+	if c.Proxy.BodyLimit < 0 {
+		errs = append(errs, fmt.Errorf("invalid proxy.body-limit %d: must be >= 0", c.Proxy.BodyLimit))
 	}
 
 	if len(errs) > 0 {

@@ -13,9 +13,12 @@ const (
 
 // Server defaults, used when the corresponding config.yaml fields are omitted.
 const (
-	DefaultServerPort         = 8080
+	DefaultBalancerPort       = 8080
+	DefaultRegistryPort       = 8081
+	DefaultMetricsPort        = 2112
 	DefaultServerReadTimeout  = 5 * time.Second
 	DefaultServerWriteTimeout = 10 * time.Second
+	DefaultProxyBodyLimit     = 16 << 10
 )
 
 type (

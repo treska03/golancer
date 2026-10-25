@@ -79,7 +79,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//
 	// Note: sticky balancers select deterministically, so a reachable-but-failing
 	// backend gets re-selected each attempt until the prober evicts it.
-	for attempt := 0; attempt <= h.MaxRetries; attempt++ {
+	for attempt := 0; attempt <= h.maxRetriesFor(r); attempt++ {
 		if r.Context().Err() != nil {
 			return
 		}
@@ -105,6 +105,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Error(w, "no healthy backend could serve the request", http.StatusServiceUnavailable)
+}
+
+// maxRetriesFor returns how many failovers r may get. POST and PATCH may not be
+// idempotent, so we do not retry these.
+func (h *Handler) maxRetriesFor(r *http.Request) int {
+	switch r.Method {
+	case http.MethodPost, http.MethodPatch:
+		return 0
+	}
+	return h.MaxRetries
 }
 
 // proxyOnce reverse-proxies r to target once. Returns true if the client

@@ -18,6 +18,10 @@ balancing:
     read-timeout: 5s # max duration for reading the entire request
     write-timeout: 10s # max duration before timing out writes of the response
 
+# Proxy settings.
+proxy:
+  body-limit: 16384 # max request body in bytes (default 16 KiB when omitted)
+
 # Active health probing. Backends are only routed to once a probe succeeds, and
 # are evicted after unhealthy-threshold consecutive failures.
 health:

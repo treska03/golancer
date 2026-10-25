@@ -34,10 +34,10 @@ func Run() {
 
 	var wg sync.WaitGroup
 
+	runProber(ctx, reg, cfg)                                   // active health probing; seeds health before any server listens
 	startMetricsRegistryServer(ctx, &wg, metricsReg, mw, cfg)  // prometheus metrics registry
 	startRegistryServer(ctx, &wg, reg, chain(mw, authMW), cfg) // backend (de)registration API (auth inside metrics)
 	startBalancerServer(ctx, &wg, reg, mw, cfg)                // proxies traffic + health endpoint
-	runProber(ctx, reg, cfg)                                   // active health probing
 
 	// Block until signalled and both servers have finished draining.
 	wg.Wait()
@@ -59,8 +59,10 @@ func loadConfig() *config.Config {
 func runProber(ctx context.Context, reg *backend.Registry, cfg *config.Config) {
 	prober := health.NewProber(reg, cfg.HealthConfig())
 	// Seed health before we accept traffic so baseline backends aren't treated
-	// as down for the first interval. Runtime-added backends are picked up on
-	// the next probe round (up to one interval later).
+	// as down for the first interval. Run calls this before starting any
+	// server, so this blocking round must stay ahead of the listeners.
+	// Runtime-added backends are picked up on the next probe round (up to one
+	// interval later).
 	prober.ProbeOnce(ctx)
 	go prober.Run(ctx)
 }

@@ -81,16 +81,13 @@ func (c *Config) HealthConfig() *health.Config {
 	return out
 }
 
-func (c *Config) serverConfig(s ServerSettings) *server.Config {
+func (c *Config) serverConfig(s ServerSettings, defaultPort int) *server.Config {
 	out := &server.Config{
-		Port:         DefaultServerPort,
+		Port:         s.portOr(defaultPort),
 		ReadTimeout:  DefaultServerReadTimeout,
 		WriteTimeout: DefaultServerWriteTimeout,
 	}
 
-	if s.Port != 0 {
-		out.Port = s.Port
-	}
 	if s.ReadTimeout != "" {
 		out.ReadTimeout, _ = time.ParseDuration(s.ReadTimeout)
 	}
@@ -101,11 +98,19 @@ func (c *Config) serverConfig(s ServerSettings) *server.Config {
 }
 
 func (c *Config) BalancerConfig() *server.Config {
-	return c.serverConfig(c.Balancer.Server)
+	return c.serverConfig(c.Balancer.Server, DefaultBalancerPort)
 }
 
 func (c *Config) RegistryConfig() *server.Config {
-	return c.serverConfig(c.Discovery.Registry.Server)
+	return c.serverConfig(c.Discovery.Registry.Server, DefaultRegistryPort)
+}
+
+// portOr returns the configured port, or def when it is unset (0).
+func (s ServerSettings) portOr(def int) int {
+	if s.Port != 0 {
+		return s.Port
+	}
+	return def
 }
 
 func (c *Config) RegistryToken() string {
@@ -113,9 +118,15 @@ func (c *Config) RegistryToken() string {
 }
 
 func (c *Config) MetricsConfig() *server.Config {
-	return c.serverConfig(c.Observability.Metrics.Server)
+	return c.serverConfig(c.Observability.Metrics.Server, DefaultMetricsPort)
 }
 
+// ProxyBodyLimit returns the max request body size in bytes, falling back to
+// DefaultProxyBodyLimit when unset. A zero limit would otherwise make
+// http.MaxBytesReader reject every non-empty body.
 func (c *Config) ProxyBodyLimit() int64 {
+	if c.Proxy.BodyLimit == 0 {
+		return DefaultProxyBodyLimit
+	}
 	return int64(c.Proxy.BodyLimit)
 }
