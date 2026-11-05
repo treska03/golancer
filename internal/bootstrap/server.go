@@ -36,7 +36,7 @@ func startRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.R
 // and starts it in the background.
 func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, mw server.Middleware, cfg *config.Config) {
 	pool := cfg.ProxySelector(reg)
-	lbHandler := proxy.NewHandler(pool, cfg.Balancer.MaxRetries)
+	lbHandler := proxy.NewHandler(pool, cfg.Balancer.MaxRetries, cfg.TrustedProxies())
 	healthHandler := handlers.NewHealthHandler(reg)
 
 	balancerServer := server.New(cfg.BalancerConfig(), mw, lbHandler, healthHandler)

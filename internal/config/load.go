@@ -3,8 +3,10 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/treska03/golancer/internal/backend"
@@ -52,7 +54,7 @@ func (c *Config) DomainBackends() []*domain.Backend {
 func (c *Config) ProxySelector(reg *backend.Registry) proxy.Balancer {
 	switch c.Balancer.Strategy {
 	case StrategyIPHash:
-		return proxy.ByClientIP(balancer.NewHashSelector(reg))
+		return proxy.ByClientIP(balancer.NewHashSelector(reg), c.TrustedProxies())
 	case StrategyLeastConnections:
 		return proxy.Rotate(balancer.NewLeastConnectionsSelector(reg))
 	case StrategyRandom:
@@ -129,4 +131,31 @@ func (c *Config) ProxyBodyLimit() int64 {
 		return DefaultProxyBodyLimit
 	}
 	return int64(c.Proxy.BodyLimit)
+}
+
+// TrustedProxies parses proxy.trusted-proxies. Entries were checked by
+// Validate, so unparsable ones can't occur here and are skipped.
+func (c *Config) TrustedProxies() proxy.TrustedProxies {
+	out := make(proxy.TrustedProxies, 0, len(c.Proxy.TrustedProxies))
+	for _, s := range c.Proxy.TrustedProxies {
+		if p, err := parsePrefix(s); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// parsePrefix accepts a CIDR ("10.0.0.0/8") or a bare IP ("10.1.2.3"), which
+// is treated as a single-address prefix.
+func parsePrefix(s string) (netip.Prefix, error) {
+	if strings.Contains(s, "/") {
+		p, err := netip.ParsePrefix(s)
+		return p.Masked(), err
+	}
+	addr, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	addr = addr.Unmap()
+	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }

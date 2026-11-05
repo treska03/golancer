@@ -55,6 +55,10 @@ func TestValidateRejects(t *testing.T) {
 			cfg:  Config{Balancer: BalancerSettings{Server: ServerSettings{WriteTimeout: "-1s"}}},
 			want: `invalid balancing.server.write-timeout "-1s": must not be negative`,
 		},
+		"bad trusted proxy": {
+			cfg:  Config{Proxy: ProxySettings{TrustedProxies: []string{"10.0.0.0/8", "not-an-ip"}}},
+			want: `invalid proxy.trusted-proxies.1 "not-an-ip": must be a CIDR or IP`,
+		},
 		"negative body limit": {
 			cfg:  Config{Proxy: ProxySettings{BodyLimit: -1}},
 			want: "invalid proxy.body-limit -1: must be >= 0",
@@ -67,5 +71,22 @@ func TestValidateRejects(t *testing.T) {
 				t.Fatalf("Validate() = %v, want error containing %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestTrustedProxiesParsed(t *testing.T) {
+	c := Config{Proxy: ProxySettings{TrustedProxies: []string{"10.1.2.3/8", "192.168.1.1", "::1"}}}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	got := c.TrustedProxies()
+	want := []string{"10.0.0.0/8", "192.168.1.1/32", "::1/128"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i].String() != want[i] {
+			t.Errorf("entry %d = %s, want %s", i, got[i], want[i])
+		}
 	}
 }

@@ -82,5 +82,8 @@ type (
 
 	ProxySettings struct {
 		BodyLimit int `yaml:"body-limit"`
+		// TrustedProxies lists CIDRs (or bare IPs) of reverse proxies in front
+		// of the balancer whose X-Forwarded-For / X-Forwarded-Proto are believed.
+		TrustedProxies []string `yaml:"trusted-proxies"`
 	}
 )

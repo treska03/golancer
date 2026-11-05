@@ -89,6 +89,12 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf("invalid balancing.max-retries %d: must be >= 0", c.Balancer.MaxRetries))
 	}
 
+	for i, s := range c.Proxy.TrustedProxies {
+		if _, err := parsePrefix(s); err != nil {
+			errs = append(errs, fmt.Errorf("invalid proxy.trusted-proxies.%d %q: must be a CIDR or IP", i, s))
+		}
+	}
+
 	if c.Proxy.BodyLimit < 0 {
 		errs = append(errs, fmt.Errorf("invalid proxy.body-limit %d: must be >= 0", c.Proxy.BodyLimit))
 	}

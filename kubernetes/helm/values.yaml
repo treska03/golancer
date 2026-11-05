@@ -211,6 +211,10 @@ configMaps:
         # Proxy settings.
         proxy:
           body-limit: 16384 # max request body in bytes (default 16 KiB when omitted)
+          # CIDRs/IPs of reverse proxies in front of the balancer (ingress, cloud LB).
+          # Only their X-Forwarded-For/-Proto are believed; ip-hash then keys on the
+          # real client IP instead of the proxy's. Empty = trust no one.
+          trusted-proxies: []
 
         # Active health probing. Backends are only routed to once a probe succeeds, and
         # are evicted after unhealthy-threshold consecutive failures.
