@@ -44,7 +44,7 @@ func main() {
 
 	// 2. Start the Proxy
 	g.Go(func() error {
-		return runProcess(ctx, "Proxy", "go", "run", "./cmd/balancer", "--config", "config.local.yaml")
+		return runProcess(ctx, "Proxy", "go", "run", "./cmd/balancer", "--config", "config.yaml")
 	})
 
 	// Give the server and proxy a short delay to start up before launching traffic
