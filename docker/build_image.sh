@@ -3,9 +3,10 @@
 # Build a golancer container image. Two images are available:
 #
 #   default      docker/Dockerfile           -> golancer
-#                The balancer itself, with config.yaml baked in (static
-#                backends on 127.0.0.1:2115/2215/2315; more can be registered
-#                at runtime via the registry API on :8081).
+#                The balancer binary only. No config.yaml is included: mount
+#                one and pass `-config <path>` (the Helm chart mounts it from a
+#                ConfigMap at /etc/golancer/config.yaml), e.g.
+#                  docker run -v "$PWD/config.yaml:/app/config.yaml:ro" golancer
 #
 #   --simulate   docker/Dockerfile.simulate  -> golancer-simulate
 #                scripts/simulate_server: fake backends on 127.0.0.1. Run it as

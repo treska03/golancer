@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const MaxWeight uint64 = 1_000_000
+
 type Backend struct {
 	InstanceID          string
 	URL                 *url.URL

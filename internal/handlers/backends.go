@@ -91,11 +91,17 @@ func parseRegisterBackendReq(r *http.Request) (*url.URL, uint64, error) {
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return nil, 0, fmt.Errorf("url %q must include a scheme and host", req.URL)
 	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, 0, fmt.Errorf("url %q must use http or https", req.URL)
+	}
 
 	// A missing/zero weight defaults to 1, matching config-loaded backends.
 	weight := req.Weight
 	if weight == 0 {
 		weight = 1
+	}
+	if weight > domain.MaxWeight {
+		return nil, 0, fmt.Errorf("weight %d exceeds maximum %d", weight, domain.MaxWeight)
 	}
 
 	return parsedURL, weight, nil

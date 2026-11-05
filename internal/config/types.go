@@ -13,9 +13,12 @@ const (
 
 // Server defaults, used when the corresponding config.yaml fields are omitted.
 const (
-	DefaultServerPort         = 8080
+	DefaultBalancerPort       = 8080
+	DefaultRegistryPort       = 8081
+	DefaultMetricsPort        = 2112
 	DefaultServerReadTimeout  = 5 * time.Second
 	DefaultServerWriteTimeout = 10 * time.Second
+	DefaultProxyBodyLimit     = 16 << 10
 )
 
 type (
@@ -25,6 +28,7 @@ type (
 		Health        HealthSettings        `yaml:"health"`
 		Discovery     DiscoverySettings     `yaml:"discovery"`
 		Observability ObservabilitySettings `yaml:"observability"`
+		Proxy         ProxySettings         `yaml:"proxy"`
 	}
 
 	BackendSettings struct {
@@ -74,5 +78,12 @@ type (
 		Port         int    `yaml:"port"`
 		ReadTimeout  string `yaml:"read-timeout"`
 		WriteTimeout string `yaml:"write-timeout"`
+	}
+
+	ProxySettings struct {
+		BodyLimit int `yaml:"body-limit"`
+		// TrustedProxies lists CIDRs (or bare IPs) of reverse proxies in front
+		// of the balancer whose X-Forwarded-For / X-Forwarded-Proto are believed.
+		TrustedProxies []string `yaml:"trusted-proxies"`
 	}
 )

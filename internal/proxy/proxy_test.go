@@ -50,7 +50,7 @@ func TestByClientIPExtractsHost(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.9:54321"
-	if _, err := ByClientIP(ks).Select(req); err != nil {
+	if _, err := ByClientIP(ks, nil).Select(req); err != nil {
 		t.Fatalf("Select: %v", err)
 	}
 	if gotKey != "203.0.113.9" {
@@ -84,10 +84,11 @@ func (t *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // connection time, the request body is replayed to the next backend.
 func TestFailoverReplaysBody(t *testing.T) {
 	ft := &fakeTransport{failFirst: 1}
-	h := NewHandler(newSeqSelector("http://backend-1.invalid", "http://backend-2.invalid"), 3)
+	h := NewHandler(newSeqSelector("http://backend-1.invalid", "http://backend-2.invalid"), 3, nil)
 	h.transport = ft
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("hello-body"))
+	// PUT: idempotent and carries a body, so it is retried with a replayed body.
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader("hello-body"))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -105,7 +106,7 @@ func TestFailoverReplaysBody(t *testing.T) {
 // TestRetriesExhausted verifies a 503 once every attempt fails.
 func TestRetriesExhausted(t *testing.T) {
 	ft := &fakeTransport{failFirst: 99}
-	h := NewHandler(newSeqSelector("http://backend-1.invalid"), 2)
+	h := NewHandler(newSeqSelector("http://backend-1.invalid"), 2, nil)
 	h.transport = ft
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -118,5 +119,28 @@ func TestRetriesExhausted(t *testing.T) {
 	// MaxRetries=2 means attempts at retryCount 0,1,2 => 3 upstream calls.
 	if ft.calls != 3 {
 		t.Fatalf("expected 3 attempts (initial + 2 retries), got %d", ft.calls)
+	}
+}
+
+// TestNonIdempotentNotRetried verifies POST and PATCH get a single attempt:
+// a failed one may already have been applied by the backend.
+func TestNonIdempotentNotRetried(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPatch} {
+		t.Run(method, func(t *testing.T) {
+			ft := &fakeTransport{failFirst: 1}
+			h := NewHandler(newSeqSelector("http://backend-1.invalid", "http://backend-2.invalid"), 3, nil)
+			h.transport = ft
+
+			req := httptest.NewRequest(method, "/", strings.NewReader("write"))
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if ft.calls != 1 {
+				t.Fatalf("expected exactly 1 upstream attempt, got %d", ft.calls)
+			}
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("expected 503 after the single failed attempt, got %d", rec.Code)
+			}
+		})
 	}
 }

@@ -77,7 +77,7 @@ Standalone image builder (also called by `redeploy.sh`):
 
 | Flag         | Dockerfile                   | Image               | Contents                                  |
 | ------------ | ---------------------------- | ------------------- | ----------------------------------------- |
-| (default)    | `docker/Dockerfile`          | `golancer`          | the balancer, with `config.yaml` baked in |
+| (default)    | `docker/Dockerfile`          | `golancer`          | the balancer binary (config mounted at runtime) |
 | `--simulate` | `docker/Dockerfile.simulate` | `golancer-simulate` | `simulate_server` fake backends           |
 
 ```bash
@@ -119,8 +119,9 @@ Each simulated backend responds with `{"instance_id", "port", "visits"}` after a
 
 To change the simulated ports, set `simulate.ports` in
 [`values.yaml`](../../kubernetes/helm/values.yaml) **and** update the backends
-in `config.yaml` to match. The config is baked into the image, so the two must
-be kept in sync by hand.
+under `configMaps.golancer-config` in the same file to match. The chart mounts
+that ConfigMap as the balancer's config (the repo-root `config.yaml` is not used
+in the cluster), so the two must be kept in sync by hand.
 
 ## Ports
 
