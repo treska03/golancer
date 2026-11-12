@@ -51,6 +51,35 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Name of the standalone backend pods' Deployment and Service (backendPods).
+*/}}
+{{- define "golancer.backendsFullname" -}}
+{{- printf "%s-backends" (include "golancer.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Selector labels for the backend pods. app.kubernetes.io/name differs from the
+balancer's so neither the balancer's Deployment nor its Service selects them.
+*/}}
+{{- define "golancer.backendsSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "golancer.name" . }}-backends
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: backend
+{{- end }}
+
+{{/*
+Common labels for the backend pods.
+*/}}
+{{- define "golancer.backendsLabels" -}}
+helm.sh/chart: {{ include "golancer.chart" . }}
+{{ include "golancer.backendsSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "golancer.serviceAccountName" -}}

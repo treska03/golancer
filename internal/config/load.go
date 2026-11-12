@@ -159,3 +159,8 @@ func parsePrefix(s string) (netip.Prefix, error) {
 	addr = addr.Unmap()
 	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }
+
+// KubeDiscoveryEnabled reports whether pods are discovered via the Kubernetes API.
+func (c *Config) KubeDiscoveryEnabled() bool {
+	return c.Discovery.Mode == DiscoveryKubernetes
+}

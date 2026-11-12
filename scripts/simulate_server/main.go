@@ -24,7 +24,9 @@ import (
 // the same process behave independently.
 type server struct {
 	instanceID int64
+	host       string // interface to bind; 127.0.0.1 unless overridden
 	port       int
+	hostname   string // reported in responses so separate pods can be told apart
 
 	mu    sync.Mutex
 	count int
@@ -58,6 +60,7 @@ func (s *server) routes() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"instance_id": s.instanceID,
+			"hostname":    s.hostname,
 			"port":        s.port,
 			"visits":      currentCount,
 		})
@@ -88,9 +91,9 @@ func (s *server) routes() http.Handler {
 // serve claims the port (killing any stale holder) and blocks serving requests.
 func (s *server) serve() error {
 	freePort(s.port)
-	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
+	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
 	ln := listenWhenFree(addr)
-	log.Printf("Starting server %d on :%d...", s.instanceID, s.port)
+	log.Printf("Starting server %d on %s...", s.instanceID, addr)
 	return http.Serve(ln, s.routes())
 }
 
@@ -203,7 +206,10 @@ func main() {
 	ptrID := flag.Int64("id", 1, "Base instance ID (used when -ports is omitted, and as the starting id when it is)")
 	portsFlag := flag.String("ports", "", "Comma-separated list of ports to serve on (e.g. 2115,2215). Overrides -id-derived port.")
 	startHealthy := flag.Bool("healthy", true, "Whether /healthz reports 200 at startup")
+	host := flag.String("host", "127.0.0.1", "Interface to bind. Use 0.0.0.0 to be reachable from other pods (e.g. behind a Service)")
 	flag.Parse()
+
+	hostname, _ := os.Hostname() // the pod name in Kubernetes
 
 	// Determine which ports to serve. An explicit -ports list wins; otherwise
 	// fall back to the single id-derived port for backward compatibility.
@@ -225,7 +231,9 @@ func main() {
 	for i, port := range ports {
 		s := &server{
 			instanceID: *ptrID + int64(i),
+			host:       *host,
 			port:       port,
+			hostname:   hostname,
 		}
 		s.healthy.Store(*startHealthy)
 

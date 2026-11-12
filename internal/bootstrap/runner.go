@@ -34,6 +34,8 @@ func Run() {
 
 	var wg sync.WaitGroup
 
+	startDiscovery(ctx, &wg, reg, cfg) // optional k8s pod discovery; waits for the initial endpoint set
+
 	runProber(ctx, reg, cfg)                                   // active health probing; seeds health before any server listens
 	startMetricsRegistryServer(ctx, &wg, metricsReg, mw, cfg)  // prometheus metrics registry
 	startRegistryServer(ctx, &wg, reg, chain(mw, authMW), cfg) // backend (de)registration API (auth inside metrics)

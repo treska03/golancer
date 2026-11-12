@@ -1,0 +1,35 @@
+# Overlay for testing discovery.mode: kubernetes-discovery. Layer it on top of
+# values.yaml:
+#
+#   helm upgrade --install golancer kubernetes/helm -f kubernetes/helm/values-discovery.yaml
+#   (or: scripts/kubernetes/redeploy.sh --discovery)
+#
+# Instead of the loopback sidecar, the simulated backends run as separate pods
+# behind the <fullname>-backends Service. The balancer watches that Service's
+# EndpointSlices and balances across the ready pod IPs directly, so scaling the
+# backends Deployment or failing a pod's readiness changes the pool live.
+
+# No sidecar: the backends are the backendPods Deployment instead.
+simulate:
+  enabled: false
+
+backendPods:
+  enabled: true
+
+# Role + RoleBinding so the balancer's ServiceAccount can list/watch
+# EndpointSlices in the release namespace.
+rbac:
+  create: true
+
+configMaps:
+  golancer-config:
+    data:
+      config.yaml:
+        # The static loopback backends only exist with the sidecar.
+        backends: []
+        discovery:
+          mode: kubernetes-discovery
+          kubernetes:
+            # Rendered with tpl by templates/configmap.yaml.
+            service: '{{ include "golancer.backendsFullname" . }}'
+            port-name: http

@@ -16,11 +16,15 @@
 #   scripts/kubernetes/redeploy.sh --wait          # also block on rollout
 #   scripts/kubernetes/redeploy.sh --no-build -t X # reuse existing image tags
 #   scripts/kubernetes/redeploy.sh --no-simulate   # golancer only, no sidecar
+#   scripts/kubernetes/redeploy.sh --discovery     # backends as separate pods
 #
 # Flags:
 #   -t, --tag TAG      Image tag to build/deploy for both images
 #                      (default: dev-<sha>[-dirty]-<ts>).
 #       --no-simulate  Skip the simulated-backends sidecar (simulate.enabled=false).
+#       --discovery    Run the simulated backends as separate pods behind a
+#                      Service and have golancer find them with
+#                      discovery.mode: kubernetes-discovery (values-discovery.yaml).
 #       --no-build     Skip docker build; the tag(s) must already exist locally.
 #       --wait         Wait for the rollout to become Ready (see the note below).
 #   -h, --help         Show this help.
@@ -39,6 +43,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 IMAGE_TAG=""
 SIMULATE="true"
+DISCOVERY="false"
 DO_BUILD="true"
 WAIT="false"
 HELM_TIMEOUT="${GOLANCER_HELM_TIMEOUT:-120s}"
@@ -49,12 +54,21 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -t|--tag)   IMAGE_TAG="${2:?--tag requires a value}"; shift 2 ;;
     --no-simulate) SIMULATE="false"; shift ;;
+    --discovery)   DISCOVERY="true"; shift ;;
     --no-build)    DO_BUILD="false"; shift ;;
     --wait)        WAIT="true"; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
 done
+
+# SIMULATE: build/load the golancer-simulate image. SIDECAR: run it inside the
+# golancer pod. With --discovery the same image runs as separate pods instead.
+if [[ "${DISCOVERY}" == "true" && "${SIMULATE}" == "false" ]]; then
+  die "--discovery runs the simulated backends as pods; it can't be combined with --no-simulate"
+fi
+SIDECAR="${SIMULATE}"
+[[ "${DISCOVERY}" == "true" ]] && SIDECAR="false"
 
 require_cmd docker kind helm kubectl
 cluster_exists || die "kind cluster '${CLUSTER_NAME}' not found. Run scripts/kubernetes/prepare_cluster.sh first."
@@ -107,8 +121,11 @@ helm_args=(
   --set "image.repository=${IMAGE_NAME}"
   --set "image.tag=${IMAGE_TAG}"
   --set "image.pullPolicy=IfNotPresent"
-  --set "simulate.enabled=${SIMULATE}"
+  --set "simulate.enabled=${SIDECAR}"
 )
+if [[ "${DISCOVERY}" == "true" ]]; then
+  helm_args+=(--values "${CHART_DIR}/values-discovery.yaml")
+fi
 if [[ "${SIMULATE}" == "true" ]]; then
   helm_args+=(
     --set "simulate.image.repository=${SIM_IMAGE_NAME}"
@@ -125,7 +142,25 @@ log "Deployed ${IMAGE_REF}. Current pods:"
 run kubectl --namespace "${NAMESPACE}" get pods \
   -l "app.kubernetes.io/instance=${RELEASE}" -o wide || true
 
-if [[ "${SIMULATE}" == "true" ]]; then
+if [[ "${DISCOVERY}" == "true" ]]; then
+  cat >&2 <<EOF
+
+${_C_YELLOW}Next:${_C_OFF} golancer discovers the ${RELEASE}-backends pods via EndpointSlices:
+
+  # terminal 1 - forward proxy, registry API and metrics:
+  kubectl -n ${NAMESPACE} port-forward deploy/${RELEASE} 8080:8080 8081:8081 2112:2112
+
+  # terminal 2 - see which pod served each request, and the discovered pool:
+  for i in \$(seq 1 30); do curl -s localhost:8080/; echo; done | jq -r .hostname | sort | uniq -c
+  curl -s localhost:8081/backends
+
+  # change the pool live: scale, or delete a pod
+  kubectl -n ${NAMESPACE} scale deploy/${RELEASE}-backends --replicas=5
+  kubectl -n ${NAMESPACE} logs deploy/${RELEASE} | grep discovery
+
+See scripts/kubernetes/README.md for the full workflow.
+EOF
+elif [[ "${SIMULATE}" == "true" ]]; then
   cat >&2 <<EOF
 
 ${_C_YELLOW}Next:${_C_OFF} drive traffic through the balancer and the simulated backends:

@@ -31,6 +31,26 @@ simulate:
   ports: "2115,2215,2315"
   resources: {}
 
+# Simulated backends as their own pods (Deployment + Service named
+# <fullname>-backends), using the simulate.image above. This is what
+# discovery.mode: kubernetes-discovery balances across; values-discovery.yaml
+# turns it on together with the matching balancer config and RBAC:
+#   helm upgrade --install golancer kubernetes/helm -f kubernetes/helm/values-discovery.yaml
+backendPods:
+  enabled: false
+  replicaCount: 3
+  # Container port, also the Service port (named "http").
+  port: 8080
+  # Only ready pods are discovered. Hitting /toggle-health on a pod fails this
+  # probe, so the pod drops out of the EndpointSlice and out of the pool.
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    periodSeconds: 2
+    failureThreshold: 1
+  resources: {}
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -38,6 +58,12 @@ nameOverride: ""
 fullnameOverride: ""
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+# RBAC for kubernetes-discovery: read-only access to EndpointSlices in the
+# namespace the release is installed in (set discovery.kubernetes.namespace to
+# another namespace? then grant access there yourself).
+rbac:
+  create: false
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
@@ -183,7 +209,8 @@ tolerations: []
 affinity: {}
 
 # ConfigMaps to create, keyed by name. Each data key is a file name; give it
-# a string (used verbatim) or structured YAML (serialised for you).
+# a string or structured YAML (serialised for you). Either is then rendered
+# with tpl, so it may reference chart templates (see values-discovery.yaml).
 configMaps:
   golancer-config:
     data:
@@ -228,7 +255,14 @@ configMaps:
             path: /healthz # path probed on each backend (expects 2xx)
 
         discovery:
-          mode: self-registration # possible modes: self-registration
+          mode: self-registration # possible modes: self-registration (default), kubernetes-discovery
+          # Used only with mode: kubernetes-discovery. Watches the Service's EndpointSlices and
+          # balances across its *ready* pod IPs directly (not via the ClusterIP).
+          kubernetes:
+            namespace: "" # Service namespace (default: this pod's namespace)
+            service: "" # Service whose pods are balanced (required)
+            port-name: "" # Service port, by name, to send traffic to ("" = the unnamed port)
+            api-server: "" # outside a cluster only, e.g. http://127.0.0.1:8001 from `kubectl proxy`
           registry:
             server:
               port: 8081 # port the registry API listens on
