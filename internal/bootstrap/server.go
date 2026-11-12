@@ -23,15 +23,6 @@ func startMetricsRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *pr
 	startServer(ctx, wg, regServer)
 }
 
-// startRegistryServer builds the registry server (the backend
-// (de)registration API) and starts it in the background.
-func startRegistryServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, mw server.Middleware, cfg *config.Config) {
-	regHandler := handlers.NewBackendHandler(reg)
-
-	registryServer := server.New(cfg.RegistryConfig(), mw, regHandler)
-	startServer(ctx, wg, registryServer)
-}
-
 // startBalancerServer builds the load-balancer server (proxy + health endpoint)
 // and starts it in the background.
 func startBalancerServer(ctx context.Context, wg *sync.WaitGroup, reg *backend.Registry, mw server.Middleware, cfg *config.Config) {

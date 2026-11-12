@@ -1,0 +1,19 @@
+simulate:
+  enabled: false
+
+backendPods:
+  enabled: true
+
+rbac:
+  create: true
+
+configMaps:
+  golancer-config:
+    data:
+      config.yaml:
+        backends: []
+        discovery:
+          mode: kubernetes-discovery
+          kubernetes:
+            service: '{{ include "golancer.backendsFullname" . }}'
+            port-name: http

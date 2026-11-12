@@ -8,12 +8,8 @@ metadata:
     {{- include "golancer.labels" $ | nindent 4 }}
 data:
   {{- range $file, $content := $cm.data }}
-  {{- /* Strings are used verbatim; anything else is serialised as YAML. */}}
+  {{- $text := ternary $content (toYaml $content) (kindIs "string" $content) }}
   {{ $file }}: |
-    {{- if kindIs "string" $content }}
-    {{- $content | trimSuffix "\n" | nindent 4 }}
-    {{- else }}
-    {{- toYaml $content | nindent 4 }}
-    {{- end }}
+    {{- tpl $text $ | trimSuffix "\n" | nindent 4 }}
   {{- end }}
 {{- end }}

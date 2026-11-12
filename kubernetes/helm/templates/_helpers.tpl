@@ -50,6 +50,25 @@ app.kubernetes.io/name: {{ include "golancer.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{- define "golancer.backendsFullname" -}}
+{{- printf "%s-backends" (include "golancer.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "golancer.backendsSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "golancer.name" . }}-backends
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: backend
+{{- end }}
+
+{{- define "golancer.backendsLabels" -}}
+helm.sh/chart: {{ include "golancer.chart" . }}
+{{ include "golancer.backendsSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
 {{/*
 Create the name of the service account to use
 */}}

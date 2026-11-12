@@ -1,0 +1,57 @@
+{{- if .Values.backendPods.enabled }}
+{{- $b := .Values.backendPods }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "golancer.backendsFullname" . }}
+  labels:
+    {{- include "golancer.backendsLabels" . | nindent 4 }}
+spec:
+  replicas: {{ $b.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "golancer.backendsSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "golancer.backendsLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      containers:
+        - name: backend
+          image: "{{ .Values.simulate.image.repository }}:{{ .Values.simulate.image.tag }}"
+          imagePullPolicy: {{ .Values.simulate.image.pullPolicy }}
+          args: ["-host", "0.0.0.0", "-ports", {{ $b.port | quote }}]
+          ports:
+            - name: http
+              containerPort: {{ $b.port }}
+              protocol: TCP
+          {{- with $b.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $b.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "golancer.backendsFullname" . }}
+  labels:
+    {{- include "golancer.backendsLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $b.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "golancer.backendsSelectorLabels" . | nindent 4 }}
+{{- end }}

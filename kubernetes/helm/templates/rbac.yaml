@@ -1,0 +1,28 @@
+{{- if .Values.rbac.create }}
+# Lets the balancer watch EndpointSlices for kubernetes-discovery.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "golancer.fullname" . }}-discovery
+  labels:
+    {{- include "golancer.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "golancer.fullname" . }}-discovery
+  labels:
+    {{- include "golancer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "golancer.fullname" . }}-discovery
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "golancer.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

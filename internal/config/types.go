@@ -5,6 +5,11 @@ import (
 )
 
 const (
+	DiscoverySelfRegistration = "self-registration"
+	DiscoveryKubernetes       = "kubernetes-discovery"
+)
+
+const (
 	StrategyIPHash           = "ip-hash"
 	StrategyLeastConnections = "least-connections"
 	StrategyRandom           = "random"
@@ -56,8 +61,24 @@ type (
 	}
 
 	DiscoverySettings struct {
-		Mode     string           `yaml:"mode"`
-		Registry RegistrySettings `yaml:"registry"`
+		Mode       string             `yaml:"mode"`
+		Registry   RegistrySettings   `yaml:"registry"`
+		Kubernetes KubernetesSettings `yaml:"kubernetes"`
+	}
+
+	// KubernetesSettings configures mode "kubernetes-discovery": the ready pod
+	// endpoints of one Service are watched via its EndpointSlices.
+	KubernetesSettings struct {
+		// Service whose pods are balanced. Required.
+		Service string `yaml:"service"`
+		// Namespace of the Service. Defaults to the pod's own namespace.
+		Namespace string `yaml:"namespace"`
+		// PortName is the Service port (by name) to send traffic to. Empty
+		// selects the Service's unnamed port.
+		PortName string `yaml:"port-name"`
+		// APIServer overrides in-cluster auth, e.g. http://127.0.0.1:8001
+		// served by `kubectl proxy`, for running outside a cluster.
+		APIServer string `yaml:"api-server"`
 	}
 
 	RegistrySettings struct {

@@ -22,6 +22,17 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf("unknown balancing strategy %q", c.Balancer.Strategy))
 	}
 
+	switch c.Discovery.Mode {
+	case DiscoverySelfRegistration, "":
+		// Valid
+	case DiscoveryKubernetes:
+		if c.Discovery.Kubernetes.Service == "" {
+			errs = append(errs, errors.New("discovery.kubernetes.service is required when discovery.mode is kubernetes-discovery"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("unknown discovery.mode %q", c.Discovery.Mode))
+	}
+
 	for i, backend := range c.Backends {
 		u, err := url.Parse(backend.URL)
 		if err != nil {

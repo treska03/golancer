@@ -69,6 +69,7 @@ scripts/kubernetes/redeploy.sh --wait           # also block until Ready
 scripts/kubernetes/redeploy.sh -t mytag         # pin the image tag
 scripts/kubernetes/redeploy.sh --no-build -t X  # reuse already-built tags
 scripts/kubernetes/redeploy.sh --no-simulate    # golancer only, no sidecar
+scripts/kubernetes/redeploy.sh --discovery      # backends as separate pods (see below)
 ```
 
 ### `docker/build_image.sh`
@@ -122,6 +123,42 @@ To change the simulated ports, set `simulate.ports` in
 under `configMaps.golancer-config` in the same file to match. The chart mounts
 that ConfigMap as the balancer's config (the repo-root `config.yaml` is not used
 in the cluster), so the two must be kept in sync by hand.
+
+## Testing Kubernetes discovery
+
+`redeploy.sh --discovery` layers
+[`values-discovery.yaml`](../../kubernetes/helm/values-discovery.yaml) on top of
+the chart defaults. Instead of the loopback sidecar it deploys:
+
+- a `golancer-backends` Deployment (3 replicas of `simulate_server`, bound to
+  `0.0.0.0:8080`, readiness-probed on `/healthz`) and a Service of the same
+  name with one port named `http`;
+- golancer with `discovery.mode: kubernetes-discovery`, watching that Service's
+  EndpointSlices (`service: golancer-backends`, `port-name: http`), no static
+  backends;
+- a Role/RoleBinding (`rbac.create: true`) letting golancer's ServiceAccount
+  list/watch EndpointSlices in the namespace.
+
+Without the script: `helm upgrade --install golancer kubernetes/helm -f kubernetes/helm/values-discovery.yaml`
+(the `golancer-simulate` image still has to be loaded into the cluster).
+
+```bash
+kubectl -n golancer port-forward deploy/golancer 8080:8080 8081:8081
+
+# which pod served each request (responses carry the pod's hostname):
+for i in $(seq 1 30); do curl -s localhost:8080/; echo; done | jq -r .hostname | sort | uniq -c
+curl -s localhost:8081/backends                       # the discovered pool
+
+# scale up/down, or kill a pod, and watch the pool follow:
+kubectl -n golancer scale deploy/golancer-backends --replicas=5
+kubectl -n golancer delete pod -l app.kubernetes.io/name=golancer-backends --wait=false
+kubectl -n golancer logs deploy/golancer -f | grep discovery
+
+# fail one pod's readiness: it goes NotReady within ~2s, leaves the EndpointSlice
+# and is removed from the pool; toggle again to bring it back.
+kubectl -n golancer port-forward pod/<backend-pod> 9000:8080 &
+curl -s localhost:9000/toggle-health
+```
 
 ## Ports
 

@@ -27,6 +27,21 @@ func TestProxyBodyLimitDefault(t *testing.T) {
 	}
 }
 
+func TestValidateDiscoveryMode(t *testing.T) {
+	ok := Config{Discovery: DiscoverySettings{Mode: DiscoveryKubernetes, Kubernetes: KubernetesSettings{Service: "web"}}}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid kubernetes discovery rejected: %v", err)
+	}
+	for name, c := range map[string]Config{
+		"missing service": {Discovery: DiscoverySettings{Mode: DiscoveryKubernetes}},
+		"unknown mode":    {Discovery: DiscoverySettings{Mode: "dns"}},
+	} {
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
 func TestValidateRejects(t *testing.T) {
 	cases := map[string]struct {
 		cfg  Config
