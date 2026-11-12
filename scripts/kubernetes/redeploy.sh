@@ -62,8 +62,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# SIMULATE: build/load the golancer-simulate image. SIDECAR: run it inside the
-# golancer pod. With --discovery the same image runs as separate pods instead.
 if [[ "${DISCOVERY}" == "true" && "${SIMULATE}" == "false" ]]; then
   die "--discovery runs the simulated backends as pods; it can't be combined with --no-simulate"
 fi

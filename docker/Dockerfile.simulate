@@ -9,10 +9,9 @@
 # serve a single id-derived port (2115 + 100*(N-1)). Remember to EXPOSE / list
 # every served port in the pod spec.
 #
-# NOTE: by default the server binds to 127.0.0.1, so it is only reachable from
-# within the same network namespace. Sidecars in a pod share that namespace, so
-# localhost works. Pass "-host 0.0.0.0" to make it reachable from other pods
-# (the Helm chart's backendPods Deployment does this).
+# NOTE: the server binds to 127.0.0.1, so it is only reachable from within the
+# same network namespace. Sidecars in a pod share that namespace, so localhost
+# works; it is NOT reachable via a Service from other pods.
 
 # ---- Build stage ----
 FROM golang:1.26.6 AS build

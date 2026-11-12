@@ -100,8 +100,6 @@ func (w *Watcher) backoffBounds() (lo, hi time.Duration) {
 	return lo, hi
 }
 
-// watchTimeout returns the watch lifetime truncated to whole seconds (at least
-// one): the API server rejects a fractional timeoutSeconds with 400 Bad Request.
 func (w *Watcher) watchTimeout() time.Duration {
 	d := w.WatchTimeout
 	if d <= 0 {

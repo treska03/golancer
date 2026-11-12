@@ -31,18 +31,10 @@ simulate:
   ports: "2115,2215,2315"
   resources: {}
 
-# Simulated backends as their own pods (Deployment + Service named
-# <fullname>-backends), using the simulate.image above. This is what
-# discovery.mode: kubernetes-discovery balances across; values-discovery.yaml
-# turns it on together with the matching balancer config and RBAC:
-#   helm upgrade --install golancer kubernetes/helm -f kubernetes/helm/values-discovery.yaml
 backendPods:
   enabled: false
   replicaCount: 3
-  # Container port, also the Service port (named "http").
   port: 8080
-  # Only ready pods are discovered. Hitting /toggle-health on a pod fails this
-  # probe, so the pod drops out of the EndpointSlice and out of the pool.
   readinessProbe:
     httpGet:
       path: /healthz
@@ -209,8 +201,7 @@ tolerations: []
 affinity: {}
 
 # ConfigMaps to create, keyed by name. Each data key is a file name; give it
-# a string or structured YAML (serialised for you). Either is then rendered
-# with tpl, so it may reference chart templates (see values-discovery.yaml).
+# a string or structured YAML (serialised for you).
 configMaps:
   golancer-config:
     data:

@@ -287,8 +287,6 @@ func TestWatcherRetriesListFailure(t *testing.T) {
 	}
 }
 
-// The API server answers a fractional timeoutSeconds with 400 Bad Request, and
-// the default watch lifetime is randomized, so it must be sent as an integer.
 func TestWatcherSendsWholeTimeoutSeconds(t *testing.T) {
 	cases := map[string]struct {
 		timeout  time.Duration

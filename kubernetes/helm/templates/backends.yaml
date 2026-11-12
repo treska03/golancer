@@ -1,8 +1,5 @@
 {{- if .Values.backendPods.enabled }}
 {{- $b := .Values.backendPods }}
-# Simulated backends (scripts/simulate_server) as standalone pods behind their
-# own Service, for testing discovery.mode: kubernetes-discovery. The balancer
-# watches this Service's EndpointSlices and balances across the ready pod IPs.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,13 +20,11 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      # The backends never talk to the API server.
       automountServiceAccountToken: false
       containers:
         - name: backend
           image: "{{ .Values.simulate.image.repository }}:{{ .Values.simulate.image.tag }}"
           imagePullPolicy: {{ .Values.simulate.image.pullPolicy }}
-          # Bind all interfaces: the balancer reaches each pod by its pod IP.
           args: ["-host", "0.0.0.0", "-ports", {{ $b.port | quote }}]
           ports:
             - name: http
@@ -53,7 +48,6 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    # The name is what discovery.kubernetes.port-name selects.
     - name: http
       port: {{ $b.port }}
       targetPort: http

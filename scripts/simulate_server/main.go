@@ -24,9 +24,9 @@ import (
 // the same process behave independently.
 type server struct {
 	instanceID int64
-	host       string // interface to bind; 127.0.0.1 unless overridden
+	host       string
 	port       int
-	hostname   string // reported in responses so separate pods can be told apart
+	hostname   string
 
 	mu    sync.Mutex
 	count int
@@ -209,7 +209,7 @@ func main() {
 	host := flag.String("host", "127.0.0.1", "Interface to bind. Use 0.0.0.0 to be reachable from other pods (e.g. behind a Service)")
 	flag.Parse()
 
-	hostname, _ := os.Hostname() // the pod name in Kubernetes
+	hostname, _ := os.Hostname()
 
 	// Determine which ports to serve. An explicit -ports list wins; otherwise
 	// fall back to the single id-derived port for backward compatibility.

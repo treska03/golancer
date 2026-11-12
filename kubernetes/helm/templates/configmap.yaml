@@ -8,9 +8,6 @@ metadata:
     {{- include "golancer.labels" $ | nindent 4 }}
 data:
   {{- range $file, $content := $cm.data }}
-  {{- /* Strings are used verbatim; anything else is serialised as YAML. Either
-         way the result is rendered with tpl, so values may reference chart
-         templates, e.g. '{{ include "golancer.backendsFullname" . }}'. */}}
   {{- $text := ternary $content (toYaml $content) (kindIs "string" $content) }}
   {{ $file }}: |
     {{- tpl $text $ | trimSuffix "\n" | nindent 4 }}
