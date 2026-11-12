@@ -7,9 +7,11 @@ them into the cluster (no registry required), and `helm upgrade --install`.
 
 The pod runs two containers: golancer, plus a `dummy-backends` sidecar running
 [`scripts/simulate_server`](../simulate_server) on `127.0.0.1:2115/2215/2315`.
-Containers in a pod share a network namespace, so the loopback backends in
-[`config.yaml`](../../config.yaml) work as-is and you get a self-contained load
-balancer to experiment with.
+Containers in a pod share a network namespace, so the loopback backends in the
+chart's config work as-is and you get a self-contained load balancer to
+experiment with. A `--discovery` mode instead runs the backends as separate
+pods and has golancer find them through the Kubernetes API (see
+[Testing Kubernetes discovery](#testing-kubernetes-discovery)).
 
 ## Prerequisites
 
@@ -19,6 +21,7 @@ balancer to experiment with.
 | `kind`    | the local cluster                 |
 | `helm`    | installing/upgrading the chart    |
 | `kubectl` | talking to the cluster            |
+| `jq`      | reading responses in the examples |
 
 ```bash
 brew install kind helm kubectl jq   # docker: Docker Desktop / colima
@@ -104,19 +107,24 @@ for i in $(seq 1 30); do curl -s localhost:8080/; echo; done | jq -r .port | sor
 
 # inspect the pool and metrics:
 curl -s localhost:8081/backends
-curl -s localhost:2112/metrics | grep golancer
+curl -s localhost:2112/metrics | grep http_requests_total
 
 # fail a backend: it is evicted after 3 failed probes (~45s with a 15s interval),
 # then re-run the traffic loop. Toggle again to bring it back.
 curl -s localhost:2115/toggle-health
 ```
 
-Each simulated backend responds with `{"instance_id", "port", "visits"}` after a
-100ms delay. `/bad_route` always returns 404, for testing error handling.
+Each simulated backend responds with
+`{"instance_id", "hostname", "port", "visits"}` after a 100ms delay.
+`/bad_route` always returns 404, for testing error handling.
 
-> The default strategy in `config.yaml` is `least-connections`. Because every
-> backend has the same latency, the 2/3/5 weights may not show up clearly in
-> the counts. Switch to `round-robin` and redeploy to see weighting in action.
+> **Expect every request on port 2115 with the default strategy.** The chart's
+> strategy is `least-connections`, and in a sequential loop no request is in
+> flight when the next one arrives. Every backend ties at zero connections, and
+> ties go to the first backend. To see the 2/3/5 weights, set
+> `balancing.strategy: random` under `configMaps.golancer-config` in
+> [`values.yaml`](../../kubernetes/helm/values.yaml) and redeploy.
+> `round-robin` rotates evenly and ignores weights.
 
 To change the simulated ports, set `simulate.ports` in
 [`values.yaml`](../../kubernetes/helm/values.yaml) **and** update the backends
@@ -141,6 +149,16 @@ the chart defaults. Instead of the loopback sidecar it deploys:
 
 Without the script: `helm upgrade --install golancer kubernetes/helm -f kubernetes/helm/values-discovery.yaml`
 (the `golancer-simulate` image still has to be loaded into the cluster).
+
+Discovered pods are added with weight 1 and are routable at once, because
+their Kubernetes readiness probe has already passed. golancer only removes pods
+it discovered itself, and the `/backends` API keeps working alongside discovery.
+
+> `values-discovery.yaml` keeps the chart's `least-connections` strategy, so
+> the sequential loop below sends every request to the same pod (they all tie
+> at zero connections). To see requests spread across pods, add
+> `balancing: {strategy: round-robin}` (or `random`) next to `discovery:` under
+> `configMaps.golancer-config.data.config.yaml` in `values-discovery.yaml`.
 
 ```bash
 kubectl -n golancer port-forward deploy/golancer 8080:8080 8081:8081
@@ -172,6 +190,10 @@ golancer serves three listeners (see [`config.yaml`](../../config.yaml)). The He
 | `2112`                | Prometheus metrics (`/metrics`)             | no          |
 | `2115`, `2215`, `2315`| simulated backends (sidecar, loopback only) | no          |
 
+The chart doesn't set `GOLANCER_REGISTRY_TOKEN`, so the registration API on
+`8081` is unauthenticated. Anyone who can reach that port can change the
+backend pool.
+
 ## Configuration
 
 Every script reads these environment variables (defaults shown):
@@ -183,6 +205,7 @@ Every script reads these environment variables (defaults shown):
 | `GOLANCER_RELEASE`   | `golancer`       | Helm release name             |
 | `GOLANCER_NAMESPACE` | `golancer`       | target namespace (auto-created) |
 | `GOLANCER_CHART_DIR` | `kubernetes/helm`| chart location                |
+| `GOLANCER_HELM_TIMEOUT` | `120s`        | how long `redeploy.sh --wait` waits |
 
 ```bash
 GOLANCER_NAMESPACE=lb scripts/kubernetes/redeploy.sh

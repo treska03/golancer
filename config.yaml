@@ -38,7 +38,14 @@ health:
     path: /healthz # path probed on each backend (expects 2xx)
 
 discovery:
-  mode: self-registration # possible modes: self-registration
+  mode: self-registration # possible modes: self-registration (default), kubernetes-discovery
+  # Used only with mode: kubernetes-discovery. Watches the Service's EndpointSlices and
+  # balances across its *ready* pod IPs directly (not via the ClusterIP).
+  kubernetes:
+    namespace: "" # Service namespace (default: this pod's namespace)
+    service: "" # Service whose pods are balanced (required)
+    port-name: "" # Service port, by name, to send traffic to ("" = the unnamed port)
+    api-server: "" # outside a cluster only, e.g. http://127.0.0.1:8001 from `kubectl proxy`
   registry:
     server:
       port: 8081 # port the registry API listens on

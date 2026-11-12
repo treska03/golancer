@@ -1,188 +1,126 @@
 # golancer
 
-A small HTTP load balancer written in Go. It fronts a pool of interchangeable
-backend instances of a **single service type** and spreads incoming requests
-across them using round-robin. Backends can be added and removed **at runtime**
-through a small management API — no restart required.
+A small HTTP load balancer in Go. It spreads requests across interchangeable
+backends of one service, health-checks them, and fails over when one is
+unreachable.
 
-> Roadmap and known gaps live in [ROADMAP.md](ROADMAP.md).
-
-## Features
-
-- **Round-robin load balancing** across all registered backends.
-- **Reverse proxying** of every incoming request to the selected backend.
-- **Dynamic backend registration** via a JSON HTTP API (`/backends`).
-- **Static seeding** of a baseline backend pool from `config.yaml` at startup.
-- **Concurrency-safe registry** using a lock-free, copy-on-write read path.
-- **Local dev harness** that spins up fake backends, the balancer, and traffic
-  generators with a single command.
-
-## How it works
-
-```
-                    ┌────────────────────────────────────────┐
-  client request ─▶ │  golancer — listens on :8080           │
-                    │                                        │
-                    │  /                     → reverse proxy │ ─▶ backend (round-robin)
-                    │  GET    /backends      → list          │
-                    │  POST   /backends      → register      │
-                    │  DELETE /backends/{id} → deregister    │
-                    │  GET    /healthz       → liveness      │
-                    │  GET    /readyz        → readiness     │
-                    └────────────────────────────────────────┘
-```
-
-- The **catch-all route** (`/`) reverse-proxies each request. On every request
-  the proxy asks the `ServerPool` for the next backend (round-robin via an
-  atomic counter) and forwards the request there. If no backends are
-  registered, it responds `503 Service Unavailable`.
-- The **`/backends` API** manages the pool at runtime. It is served on the same
-  listener as proxied traffic.
-
-### Components
-
-| Package | Responsibility |
-| --- | --- |
-| `cmd/balancer` | Entry point: loads config, wires everything together, listens on `:8080`. |
-| `internal/domain` | The `Backend` type (instance ID + URL) and its JSON encoding. |
-| `internal/backend` | `Registry` — concurrency-safe add / remove / list of backends (copy-on-write). |
-| `internal/balancer` | `ServerPool` — round-robin selection over the registry's backends. |
-| `internal/proxy` | Reverse-proxy HTTP handler that forwards to the selected backend. |
-| `internal/handlers` | The `/backends` management API, the `/healthz` & `/readyz` probes, and the mux/router composition. |
-| `scripts/` | Local dev helpers (fake backend, traffic generator, all-in-one runner). |
-
-## Getting started
-
-### Requirements
-
-- Go 1.26+ (see [`go.mod`](go.mod)).
-
-### Configuration
-
-Baseline backends are read from [`config.yaml`](config.yaml) in the working
-directory at startup:
-
-```yaml
-backends:
-  - http://127.0.0.1:2115
-  - http://127.0.0.1:2215
-  - http://127.0.0.1:2315
-```
-
-Each URL must include a scheme and a host. Every backend is assigned a
-generated instance ID at load time. Additional backends can be registered at
-runtime via the API (see below).
-
-### Run the balancer
-
-```bash
-go run ./cmd/balancer
-```
-
-The balancer listens on `:8080` and logs the number of baseline backends it
-loaded.
-
-### Try it end-to-end (dev harness)
-
-The quickest way to see it working is the all-in-one runner, which starts three
-fake backends (ports `2115`, `2215`, `2315`), the balancer, and three traffic
-generators:
+## Quick start
 
 ```bash
 go run scripts/run/main.go
 ```
 
-Press `Ctrl+C` to stop everything.
+This starts three fake backends, the balancer, and some test traffic. Press
+`Ctrl+C` to stop. It kills anything already listening on ports 8080, 8081,
+2115, 2215 and 2315.
 
-You can also run the pieces individually:
-
-```bash
-# a fake backend; -id=N listens on 2115 + 100*(N-1)
-go run scripts/simulate_server/main.go -id=1
-
-# send one request through the balancer and print the response
-go run scripts/simulate_traffic/main.go
-```
-
-Each fake backend responds with its own `instance_id` and a running `visits`
-count, so you can watch requests being distributed across the pool.
-
-## Management API
-
-All endpoints are served on `:8080` alongside proxied traffic.
-
-### List backends
+To run just the balancer:
 
 ```bash
-curl http://localhost:8080/backends
+go run ./cmd/balancer -config config.yaml
 ```
 
-```json
-{
-  "backends": [
-    { "instanceID": "…", "url": "http://127.0.0.1:2115" }
-  ]
-}
+By default it listens on three ports: `8080` for proxied traffic, `8081` for
+the backend API and `2112` for metrics. These ports, and every other setting,
+can be changed in [config.yaml](config.yaml), which has a comment on each one.
+
+## Features
+
+### Load balancing strategies
+
+Set with `balancing.strategy` (default `round-robin`):
+
+| Strategy | Picks | Uses weights |
+| --- | --- | --- |
+| `round-robin` | the next healthy backend in turn | no |
+| `random` | a random backend, weighted | yes |
+| `least-connections` | the fewest in-flight requests relative to weight | yes |
+| `ip-hash` | the same backend for the same client IP | yes |
+
+With `least-connections`, requests that arrive one at a time all tie at zero
+connections and go to the first backend. It only spreads load under
+concurrency.
+
+### Backend sources
+
+Backends can come from any of these at once:
+
+- **Static list:** `backends` in `config.yaml`, each with an optional
+  `weight`.
+- **[Backend API](#backend-api):** add and remove backends at runtime.
+- **[Kubernetes discovery](#kubernetes-discovery):** follow the pods of a
+  Service.
+
+### Health checks
+
+- Each backend is probed with `GET /healthz` every interval. A `2xx` counts as
+  a success.
+- New backends get no traffic until a probe passes.
+- A backend is dropped after 3 failures in a row and re-admitted after it
+  passes again.
+
+The path, interval, timeout and both thresholds are configurable under
+`health`.
+
+### Failover
+
+If a backend can't be reached, the request is retried on another one, up to
+`balancing.max-retries` times. `POST` and `PATCH` are never retried, and error
+responses from a backend (4xx/5xx) are passed through as-is.
+
+### Kubernetes discovery
+
+golancer can watch a Service's EndpointSlices and balance across its pods
+directly instead of going through the ClusterIP:
+
+```yaml
+discovery:
+  mode: kubernetes-discovery
+  kubernetes:
+    service: my-backend # required
+    port-name: http # Service port to use; omit for the unnamed port
 ```
 
-### Register a backend
+- Ready pods are added (weight 1). Pods that become not-ready or go away are
+  removed.
+- Static and API-registered backends are left alone.
+- Needs `get`/`list`/`watch` on `endpointslices`. The Helm chart grants this
+  with `rbac.create: true`.
+- To run outside a cluster, start `kubectl proxy` and set
+  `kubernetes.api-server: http://127.0.0.1:8001` and `kubernetes.namespace`.
+
+### Backend API
 
 ```bash
-curl -X POST http://localhost:8080/backends \
-  -H 'Content-Type: application/json' \
-  -d '{"url": "http://127.0.0.1:2415"}'
+curl localhost:8081/backends
+curl -X POST localhost:8081/backends -d '{"url": "http://127.0.0.1:2415", "weight": 2}'
+curl -X DELETE localhost:8081/backends/<instanceID>
 ```
 
-```json
-{ "instanceID": "…" }
-```
+These list, add (returns `201` with the new `instanceID`) and remove backends.
+Set `GOLANCER_REGISTRY_TOKEN` to require `Authorization: Bearer <token>`.
+Backends added this way are lost on restart.
 
-- `400` if the URL is missing/invalid (must include scheme and host).
-- `409` if the URL is already registered.
+### Probes and metrics
 
-### Deregister a backend
+- `GET /healthz` on the proxy port returns `200` while golancer is running.
+- `GET /readyz` returns `503` when no backend is healthy, so whatever sits in
+  front of golancer can take it out of rotation.
+- `GET /metrics` on the metrics port serves Prometheus metrics:
+  `http_requests_total{path,method,status}` plus Go runtime and process
+  metrics.
 
-```bash
-curl -X DELETE http://localhost:8080/backends/<instanceID>
-```
+### Other
 
-- `200` on success.
-- `404` if no backend has that instance ID.
+- **Trusted proxies:** `X-Forwarded-For` is only trusted from addresses in
+  `proxy.trusted-proxies`, so clients can't fake their IP for `ip-hash`.
+- **Limits:** read/write timeouts per port, and a request body cap
+  (`proxy.body-limit`, 16 KiB by default).
+- **Graceful shutdown:** on `SIGINT`/`SIGTERM`, in-flight requests get up to
+  10s to finish.
 
-## Health & readiness
+## More
 
-The balancer exposes probes for its **own** process, distinct from the
-per-backend health tracked by the registry.
-
-### Liveness
-
-```bash
-curl http://localhost:8080/healthz
-```
-
-```json
-{ "status": "ok" }
-```
-
-Always `200` while the process is serving — it does not inspect backends. A
-running balancer with zero healthy backends is still alive and should be kept
-out of rotation (see readiness), not restarted.
-
-### Readiness
-
-```bash
-curl http://localhost:8080/readyz
-```
-
-```json
-{ "status": "ready", "healthyBackends": 3 }
-```
-
-- `200` while at least one backend is healthy and therefore routable.
-- `503` when no backend is healthy (`{"status":"unavailable","healthyBackends":0}`),
-  so an upstream load balancer stops sending traffic to a balancer that can
-  serve none.
-
-## License
-
-See [LICENSE](LICENSE).
+- Kubernetes, Helm and Docker: [scripts/kubernetes/README.md](scripts/kubernetes/README.md)
+- Known gaps: [ROADMAP.md](ROADMAP.md)
+- Tests: `go test ./...`
